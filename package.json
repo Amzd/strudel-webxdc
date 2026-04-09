@@ -1,0 +1,60 @@
+{
+	"private": true,
+	"name": "webxdc-app-template",
+	"version": "1.0.0",
+	"description": "Template for Webxdc applications",
+	"author": "Andrew Chou <andrewchou@fastmail.com>",
+	"license": "MIT",
+	"keywords": [
+		"webxdc"
+	],
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/achou11/webxdc-app-template.git"
+	},
+	"bugs": {
+		"url": "https://github.com/achou11/webxdc-app-template/issues"
+	},
+	"homepage": "https://github.com/achou11/webxdc-app-template",
+	"type": "module",
+	"packageManager": "pnpm@10.14.0",
+	"scripts": {
+		"build": "vite build",
+		"check:eslint": "eslint --cache .",
+		"check:format": "prettier --check --cache .",
+		"check:types": "tsc",
+		"check": "pnpm run \"/^check:.*/\"",
+		"dev": "vite dev",
+		"prepare": "husky",
+		"webxdc:emulator": "webxdc-dev run http://localhost:5173 --port 2468"
+	},
+	"devDependencies": {
+		"@eslint/compat": "1.3.1",
+		"@eslint/js": "9.32.0",
+		"@ianvs/prettier-plugin-sort-imports": "4.5.1",
+		"@types/node": "22.16.5",
+		"@webxdc/types": "2.1.2",
+		"@webxdc/vite-plugins": "1.5.1",
+		"@webxdc/webxdc-dev": "0.19.0",
+		"eslint": "9.32.0",
+		"globals": "16.3.0",
+		"husky": "9.1.7",
+		"nano-staged": "0.8.0",
+		"prettier": "3.6.2",
+		"prettier-plugin-jsdoc": "1.3.3",
+		"typescript": "5.8.3",
+		"typescript-eslint": "8.38.0",
+		"vite": "7.0.6"
+	},
+	"pnpm": {
+		"ignoredBuiltDependencies": [
+			"core-js"
+		],
+		"onlyBuiltDependencies": [
+			"esbuild"
+		],
+		"overrides": {
+			"@vitejs/plugin-basic-ssl": "2.0.0"
+		}
+	}
+}
