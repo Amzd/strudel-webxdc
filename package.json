@@ -1,21 +1,20 @@
 {
 	"private": true,
-	"name": "webxdc-app-template",
+	"name": "music",
 	"version": "1.0.0",
-	"description": "Template for Webxdc applications",
-	"author": "Andrew Chou <andrewchou@fastmail.com>",
+	"description": "Music app for Webxdc",
 	"license": "MIT",
 	"keywords": [
 		"webxdc"
 	],
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/achou11/webxdc-app-template.git"
+		"url": "https://github.com/Amzd/music.git"
 	},
 	"bugs": {
-		"url": "https://github.com/achou11/webxdc-app-template/issues"
+		"url": "https://github.com/Amzd/music/issues"
 	},
-	"homepage": "https://github.com/achou11/webxdc-app-template",
+	"homepage": "https://github.com/Amzd/music",
 	"type": "module",
 	"packageManager": "pnpm@10.14.0",
 	"scripts": {

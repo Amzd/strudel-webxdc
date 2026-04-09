@@ -1,6 +1,6 @@
-# Webxdc App Template
+# Music
 
-Template project for building [Webxdc](https://webxdc.org/) applications
+A [Webxdc](https://webxdc.org/) music application
 
 ## Getting started
 
