@@ -234,7 +234,8 @@ async function init() {
 
 	// ── webxdc update listener ─────────────────────────────────────────────
 
-	await window.webxdc.setUpdateListener(async (update) => {
+	/** @param {import('@webxdc/types').ReceivedStatusUpdate<unknown>} update */
+	async function handleUpdate(update) {
 		if (!validateMp3ChunkPayload(update.payload)) return
 
 		const { uploadId, filename, chunkIndex, totalChunks, data } = update.payload
@@ -258,6 +259,16 @@ async function init() {
 			tracks.push(assembledFilename)
 			addToPlaylistUI(assembledFilename)
 		}
+	}
+
+	// Serialize update handling: webxdc does not await the async callback, so
+	// without this queue all chunk handlers for a single upload run concurrently.
+	// That causes every handler to find all chunks present and attempt a full
+	// (CPU-intensive) assembly at the same time, freezing the main thread.
+	let processingQueue = Promise.resolve()
+
+	await window.webxdc.setUpdateListener((update) => {
+		processingQueue = processingQueue.then(() => handleUpdate(update))
 	})
 
 	// ── load tracks already in IndexedDB ──────────────────────────────────
