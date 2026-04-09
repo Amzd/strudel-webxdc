@@ -206,13 +206,12 @@ async function init() {
 		const buffer = await file.arrayBuffer()
 		const bytes = new Uint8Array(buffer)
 
-		let binary = ''
-		for (let i = 0; i < bytes.length; i++) {
-			binary += String.fromCharCode(bytes[i] ?? 0)
-		}
-		const base64 = btoa(binary)
+		const chars = Array.from({ length: bytes.length }, (_, i) =>
+			String.fromCharCode(bytes[i] ?? 0)
+		)
+		const base64 = btoa(chars.join(''))
 
-		const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+		const uploadId = crypto.randomUUID()
 		const totalChunks = Math.ceil(base64.length / BASE64_CHARS_PER_CHUNK)
 
 		for (let i = 0; i < totalChunks; i++) {

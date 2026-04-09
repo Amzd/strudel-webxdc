@@ -164,9 +164,11 @@ async function getChunksForUpload(uploadId) {
 async function deleteChunks(uploadId, totalChunks) {
 	const db = await openDB()
 	const store = getStore(db, CHUNKS_STORE, 'readwrite')
-	for (let i = 0; i < totalChunks; i++) {
-		store.delete(`${uploadId}_${i}`)
-	}
+	await Promise.all(
+		Array.from({ length: totalChunks }, (_, i) =>
+			promisifyRequest(store.delete(`${uploadId}_${i}`))
+		)
+	)
 }
 
 /**
