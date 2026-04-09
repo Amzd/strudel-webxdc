@@ -1,55 +1,273 @@
-import { validateChatMessagePayload } from './lib/validate-payload'
+import {
+	getAllTrackFilenames,
+	getTrackBlob,
+	hasTrack,
+	storeChunk,
+	tryAssembleTrack,
+} from './lib/storage'
+import { validateMp3ChunkPayload } from './lib/validate-payload'
+
+/** Base64 characters per chunk — stays well within typical sendUpdateMaxSize */
+const BASE64_CHARS_PER_CHUNK = 60_000
 
 init()
 
-function init() {
-	const form = /** @type {HTMLFormElement} */ (document.querySelector('form'))
-	const output = /** @type {HTMLElement} */ (document.getElementById('output'))
-	const yourDeviceName = /** @type {HTMLElement} */ (
-		document.getElementById('your-device-name')
+async function init() {
+	const uploadBtn = /** @type {HTMLButtonElement} */ (
+		document.getElementById('upload-btn')
+	)
+	const fileInput = /** @type {HTMLInputElement} */ (
+		document.getElementById('file-input')
+	)
+	const playlist = /** @type {HTMLElement} */ (
+		document.getElementById('playlist')
+	)
+	const emptyMsg = /** @type {HTMLElement} */ (
+		document.getElementById('empty-msg')
+	)
+	const nowPlaying = /** @type {HTMLElement} */ (
+		document.getElementById('now-playing')
+	)
+	const playBtn = /** @type {HTMLButtonElement} */ (
+		document.getElementById('play-btn')
+	)
+	const prevBtn = /** @type {HTMLButtonElement} */ (
+		document.getElementById('prev-btn')
+	)
+	const nextBtn = /** @type {HTMLButtonElement} */ (
+		document.getElementById('next-btn')
+	)
+	const progressBar = /** @type {HTMLInputElement} */ (
+		document.getElementById('progress-bar')
+	)
+	const currentTimeEl = /** @type {HTMLElement} */ (
+		document.getElementById('current-time')
+	)
+	const durationEl = /** @type {HTMLElement} */ (
+		document.getElementById('duration')
 	)
 
-	yourDeviceName.textContent = `You are: ${window.webxdc.selfName}`
+	/** @type {string[]} */
+	let tracks = []
+	let currentIndex = -1
+	let isPlaying = false
+	/** @type {string | null} */
+	let currentObjectUrl = null
 
-	if (!(form && output)) {
-		console.error('DOM is not set up properly')
+	const audio = new Audio()
+
+	// ── helpers ────────────────────────────────────────────────────────────
+
+	/** @param {number} seconds */
+	function formatTime(seconds) {
+		if (!isFinite(seconds)) return '0:00'
+		const m = Math.floor(seconds / 60)
+		const s = Math.floor(seconds % 60)
+		return `${m}:${s.toString().padStart(2, '0')}`
 	}
 
-	form.addEventListener('submit', (event) => {
-		event.preventDefault()
+	function updatePlayButton() {
+		playBtn.textContent = isPlaying ? '⏸' : '▶'
+		playBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play')
+	}
 
-		const data = new FormData(form)
+	/** @param {number} index */
+	function highlightTrack(index) {
+		document
+			.querySelectorAll('.playlist-item')
+			.forEach((el, i) => el.classList.toggle('active', i === index))
+	}
 
-		const message = data.get('message')
+	/** @param {string} filename */
+	function addToPlaylistUI(filename) {
+		emptyMsg.hidden = true
+		const item = document.createElement('button')
+		item.className = 'playlist-item'
+		item.textContent = filename
+		item.type = 'button'
+		item.addEventListener('click', () => {
+			const index = tracks.indexOf(filename)
+			if (index !== -1) playTrack(index)
+		})
+		playlist.appendChild(item)
+	}
 
-		if (!message || typeof message !== 'string') return
+	/** @param {number} index */
+	async function playTrack(index) {
+		if (index < 0 || index >= tracks.length) return
 
-		/** @satisfies {import('./lib/validate-payload').ChatMessagePayload} */
-		const payload = {
-			type: 'chat_message',
-			data: message,
-			senderName: window.webxdc.selfName,
+		const filename = tracks[index]
+		if (!filename) return
+		const blob = await getTrackBlob(filename)
+		if (!blob) return
+
+		if (currentObjectUrl) {
+			URL.revokeObjectURL(currentObjectUrl)
+			currentObjectUrl = null
 		}
-		window.webxdc.sendUpdate({ payload }, '')
-		form.reset()
-	})
 
-	window.webxdc.setUpdateListener((update) => {
-		if (!validateChatMessagePayload(update.payload)) {
+		currentObjectUrl = URL.createObjectURL(blob)
+		audio.src = currentObjectUrl
+		audio.play()
+
+		currentIndex = index
+		isPlaying = true
+		nowPlaying.textContent = filename
+		playBtn.disabled = false
+		updatePlayButton()
+		highlightTrack(index)
+	}
+
+	function togglePlay() {
+		if (currentIndex === -1 && tracks.length > 0) {
+			playTrack(0)
 			return
 		}
+		if (isPlaying) {
+			audio.pause()
+			isPlaying = false
+		} else {
+			audio.play()
+			isPlaying = true
+		}
+		updatePlayButton()
+	}
 
-		const lineItem = document.createElement('p')
+	// ── audio events ───────────────────────────────────────────────────────
 
-		const displayedDeviceName = document.createElement('span')
-
-		displayedDeviceName.classList.add('device-name')
-
-		displayedDeviceName.textContent = update.payload.senderName
-
-		lineItem.appendChild(displayedDeviceName)
-		lineItem.appendChild(document.createTextNode(`: ${update.payload.data}`))
-
-		output.appendChild(lineItem)
+	audio.addEventListener('ended', () => {
+		const nextIndex = currentIndex + 1
+		if (nextIndex < tracks.length) {
+			playTrack(nextIndex)
+		} else {
+			isPlaying = false
+			updatePlayButton()
+		}
 	})
+
+	audio.addEventListener('timeupdate', () => {
+		if (!isFinite(audio.duration)) return
+		const pct = (audio.currentTime / audio.duration) * 100
+		progressBar.value = String(pct)
+		currentTimeEl.textContent = formatTime(audio.currentTime)
+	})
+
+	audio.addEventListener('loadedmetadata', () => {
+		durationEl.textContent = formatTime(audio.duration)
+		progressBar.value = '0'
+	})
+
+	audio.addEventListener('play', () => {
+		isPlaying = true
+		updatePlayButton()
+	})
+
+	audio.addEventListener('pause', () => {
+		isPlaying = false
+		updatePlayButton()
+	})
+
+	// ── controls ───────────────────────────────────────────────────────────
+
+	playBtn.addEventListener('click', togglePlay)
+
+	prevBtn.addEventListener('click', () => {
+		if (currentIndex > 0) playTrack(currentIndex - 1)
+	})
+
+	nextBtn.addEventListener('click', () => {
+		if (currentIndex < tracks.length - 1) playTrack(currentIndex + 1)
+	})
+
+	progressBar.addEventListener('input', () => {
+		if (!isFinite(audio.duration)) return
+		audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
+	})
+
+	// ── upload ─────────────────────────────────────────────────────────────
+
+	uploadBtn.addEventListener('click', () => fileInput.click())
+
+	fileInput.addEventListener('change', async () => {
+		if (!fileInput.files) return
+		for (const file of Array.from(fileInput.files)) {
+			if (!file.type.includes('audio') && !file.name.endsWith('.mp3')) continue
+			await sendFile(file)
+		}
+		fileInput.value = ''
+	})
+
+	/**
+	 * Reads a File and sends it as chunked webxdc updates.
+	 *
+	 * @param {File} file
+	 */
+	async function sendFile(file) {
+		const buffer = await file.arrayBuffer()
+		const bytes = new Uint8Array(buffer)
+
+		let binary = ''
+		for (let i = 0; i < bytes.length; i++) {
+			binary += String.fromCharCode(bytes[i] ?? 0)
+		}
+		const base64 = btoa(binary)
+
+		const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+		const totalChunks = Math.ceil(base64.length / BASE64_CHARS_PER_CHUNK)
+
+		for (let i = 0; i < totalChunks; i++) {
+			const chunk = base64.slice(
+				i * BASE64_CHARS_PER_CHUNK,
+				(i + 1) * BASE64_CHARS_PER_CHUNK
+			)
+			/** @satisfies {import('./lib/validate-payload').Mp3ChunkPayload} */
+			const payload = {
+				type: 'mp3_chunk',
+				uploadId,
+				filename: file.name,
+				chunkIndex: i,
+				totalChunks,
+				data: chunk,
+			}
+			window.webxdc.sendUpdate({ payload }, '')
+		}
+	}
+
+	// ── webxdc update listener ─────────────────────────────────────────────
+
+	await window.webxdc.setUpdateListener(async (update) => {
+		if (!validateMp3ChunkPayload(update.payload)) return
+
+		const { uploadId, filename, chunkIndex, totalChunks, data } = update.payload
+
+		const alreadyStored = await hasTrack(filename)
+		if (alreadyStored && !tracks.includes(filename)) {
+			tracks.push(filename)
+			addToPlaylistUI(filename)
+			return
+		}
+		if (alreadyStored) return
+
+		await storeChunk(uploadId, filename, chunkIndex, totalChunks, data)
+
+		const assembledFilename = await tryAssembleTrack(
+			uploadId,
+			filename,
+			totalChunks
+		)
+		if (assembledFilename && !tracks.includes(assembledFilename)) {
+			tracks.push(assembledFilename)
+			addToPlaylistUI(assembledFilename)
+		}
+	})
+
+	// ── load tracks already in IndexedDB ──────────────────────────────────
+
+	const stored = await getAllTrackFilenames()
+	for (const filename of stored) {
+		if (!tracks.includes(filename)) {
+			tracks.push(filename)
+			addToPlaylistUI(filename)
+		}
+	}
 }
