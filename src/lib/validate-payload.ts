@@ -1,35 +1,47 @@
-export type Mp3ChunkPayload = {
-	type: 'mp3_chunk'
-	uploadId: string
+/** Metadata for a single track, shared with all peers via realtime state. */
+export type TrackMeta = {
+	id: string
 	filename: string
-	chunkIndex: number
-	totalChunks: number
-	data: string
+	size: number
+	chunkCount: number
+	lastModified: number
+	/** Chunk indices still needed; empty when the track is fully available. */
+	pending: Array<number>
 }
 
-export function validateMp3ChunkPayload(
+export type AppState = {
+	tracks: Array<TrackMeta>
+}
+
+export type ChunkRequest = {
+	time: number
+	trackId: string
+	chunkIndex: number
+	/** Device ID of the peer that should respond to this request. */
+	peer: string
+}
+
+export type ChunkResponse = {
+	trackId: string
+	lastModified: number
+	chunkIndex: number
+	data: Uint8Array
+}
+
+export type AppPayload = { request: ChunkRequest } | { response: ChunkResponse }
+
+export function isChunkRequest(
 	payload: unknown
-): payload is Mp3ChunkPayload {
-	if (!payload) return false
-	if (typeof payload !== 'object') return false
+): payload is { request: ChunkRequest } {
+	if (typeof payload !== 'object' || payload === null) return false
+	const p = payload as Record<string, unknown>
+	return typeof p['request'] === 'object' && p['request'] !== null
+}
 
-	const typeIsValid = 'type' in payload && payload.type === 'mp3_chunk'
-	const uploadIdIsValid =
-		'uploadId' in payload && typeof payload.uploadId === 'string'
-	const filenameIsValid =
-		'filename' in payload && typeof payload.filename === 'string'
-	const chunkIndexIsValid =
-		'chunkIndex' in payload && typeof payload.chunkIndex === 'number'
-	const totalChunksIsValid =
-		'totalChunks' in payload && typeof payload.totalChunks === 'number'
-	const dataIsValid = 'data' in payload && typeof payload.data === 'string'
-
-	return (
-		typeIsValid &&
-		uploadIdIsValid &&
-		filenameIsValid &&
-		chunkIndexIsValid &&
-		totalChunksIsValid &&
-		dataIsValid
-	)
+export function isChunkResponse(
+	payload: unknown
+): payload is { response: ChunkResponse } {
+	if (typeof payload !== 'object' || payload === null) return false
+	const p = payload as Record<string, unknown>
+	return typeof p['response'] === 'object' && p['response'] !== null
 }
