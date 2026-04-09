@@ -1,19 +1,33 @@
 const DB_NAME = 'mp3player'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const TRACKS_STORE = 'tracks'
 const CHUNKS_STORE = 'pending_chunks'
 
+/** @type {Promise<IDBDatabase> | null} */
+let dbPromise = null
+
 /** @returns {Promise<IDBDatabase>} */
 function openDB() {
-	return new Promise((resolve, reject) => {
+	if (dbPromise) return dbPromise
+	dbPromise = new Promise((resolve, reject) => {
 		const request = indexedDB.open(DB_NAME, DB_VERSION)
 		request.onupgradeneeded = (event) => {
 			const db = /** @type {IDBOpenDBRequest} */ (event.target).result
-			if (!db.objectStoreNames.contains(TRACKS_STORE)) {
+			const oldVersion = event.oldVersion
+
+			if (oldVersion < 1) {
 				db.createObjectStore(TRACKS_STORE, { keyPath: 'filename' })
-			}
-			if (!db.objectStoreNames.contains(CHUNKS_STORE)) {
-				db.createObjectStore(CHUNKS_STORE, { keyPath: 'key' })
+				const chunksStore = db.createObjectStore(CHUNKS_STORE, {
+					keyPath: 'key',
+				})
+				chunksStore.createIndex('by_upload', 'uploadId')
+			} else if (oldVersion < 2) {
+				// Add the uploadId index that was missing in v1
+				const tx = /** @type {IDBOpenDBRequest} */ (event.target).transaction
+				const chunksStore = /** @type {IDBTransaction} */ (tx).objectStore(
+					CHUNKS_STORE
+				)
+				chunksStore.createIndex('by_upload', 'uploadId')
 			}
 		}
 		request.onsuccess = (event) =>
@@ -21,6 +35,7 @@ function openDB() {
 		request.onerror = (event) =>
 			reject(/** @type {IDBOpenDBRequest} */ (event.target).error)
 	})
+	return dbPromise
 }
 
 /**
@@ -145,12 +160,13 @@ export async function storeChunk(
  */
 async function getChunksForUpload(uploadId) {
 	const db = await openDB()
-	const store = getStore(db, CHUNKS_STORE, 'readonly')
+	const index = db
+		.transaction(CHUNKS_STORE, 'readonly')
+		.objectStore(CHUNKS_STORE)
+		.index('by_upload')
 	/** @type {{ uploadId: string; chunkIndex: number; data: string }[]} */
-	const all = await promisifyRequest(store.getAll())
-	return all
-		.filter((c) => c.uploadId === uploadId)
-		.sort((a, b) => a.chunkIndex - b.chunkIndex)
+	const chunks = await promisifyRequest(index.getAll(uploadId))
+	return chunks.sort((a, b) => a.chunkIndex - b.chunkIndex)
 }
 
 /**
@@ -186,13 +202,18 @@ export async function tryAssembleTrack(uploadId, filename, totalChunks) {
 	const chunks = await getChunksForUpload(uploadId)
 	if (chunks.length < totalChunks) return null
 
-	const base64 = chunks.map((c) => c.data).join('')
-	const binary = atob(base64)
-	const bytes = new Uint8Array(binary.length)
-	for (let i = 0; i < binary.length; i++) {
-		bytes[i] = binary.charCodeAt(i)
-	}
-	const blob = new Blob([bytes], { type: 'audio/mpeg' })
+	// Decode each chunk's base64 to a Uint8Array individually, then let Blob
+	// concatenate the parts.  This avoids building one giant joined base64
+	// string and a single massive binary string before allocation.
+	const parts = chunks.map((c) => {
+		const binary = atob(c.data)
+		const bytes = new Uint8Array(binary.length)
+		for (let i = 0; i < binary.length; i++) {
+			bytes[i] = binary.charCodeAt(i)
+		}
+		return bytes
+	})
+	const blob = new Blob(parts, { type: 'audio/mpeg' })
 	await storeTrack(filename, blob)
 	await deleteChunks(uploadId, totalChunks)
 	return filename

@@ -206,10 +206,18 @@ async function init() {
 		const buffer = await file.arrayBuffer()
 		const bytes = new Uint8Array(buffer)
 
-		const chars = Array.from({ length: bytes.length }, (_, i) =>
-			String.fromCharCode(bytes[i] ?? 0)
-		)
-		const base64 = btoa(chars.join(''))
+		// Build the binary string in 8 KiB slices so String.fromCharCode.apply
+		// never exceeds the call-stack argument limit, and avoids allocating a
+		// per-byte string array like the previous Array.from approach did.
+		const SLICE = 8192
+		let binary = ''
+		for (let i = 0; i < bytes.length; i += SLICE) {
+			binary += String.fromCharCode.apply(
+				null,
+				Array.from(bytes.subarray(i, i + SLICE))
+			)
+		}
+		const base64 = btoa(binary)
 
 		const uploadId = crypto.randomUUID()
 		const totalChunks = Math.ceil(base64.length / BASE64_CHARS_PER_CHUNK)
