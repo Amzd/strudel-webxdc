@@ -45,6 +45,7 @@ async function init() {
 	let trackIds = []
 	let currentIndex = -1
 	let isPlaying = false
+	let isSeeking = false
 	/** @type {string | null} */
 	let currentObjectUrl = null
 
@@ -262,12 +263,14 @@ async function init() {
 	// ── audio events ───────────────────────────────────────────────────────
 
 	audio.addEventListener('ended', () => {
+		if (isSeeking) return
 		if (trackIds.length > 0) {
 			playTrack((currentIndex + 1) % trackIds.length)
 		}
 	})
 
 	audio.addEventListener('timeupdate', () => {
+		if (isSeeking) return
 		if (!isFinite(audio.duration)) return
 		const pct = (audio.currentTime / audio.duration) * 100
 		progressBar.value = String(pct)
@@ -335,9 +338,34 @@ async function init() {
 		playTrack((currentIndex + 1) % trackIds.length)
 	})
 
-	progressBar.addEventListener('input', () => {
-		if (!isFinite(audio.duration)) return
+	var wasPlayingWhenStartedSeeking = false
+	progressBar.addEventListener('pointerdown', () => {
+		isSeeking = true
+		wasPlayingWhenStartedSeeking = !audio.paused
+	})
+
+	const onSeekEnd = () => {
+		if (!isSeeking) return
+		isSeeking = false
+		if (trackIds.length == 0) return
 		audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
+		if (audio.currentTime >= audio.duration) {
+			playTrack((currentIndex + 1) % trackIds.length)
+		}
+	}
+
+	document.addEventListener('pointerup', onSeekEnd)
+	document.addEventListener('pointercancel', onSeekEnd)
+
+	const seek = throttleWithTrailing(() => {
+		audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
+		if (wasPlayingWhenStartedSeeking && audio.paused && progressBar.value < 100)
+			audio.play()
+	}, 300)
+	progressBar.addEventListener('input', () => {
+		if (!isSeeking) return
+		if (!isFinite(audio.duration)) return
+		seek()
 	})
 
 	// ── upload ─────────────────────────────────────────────────────────────
@@ -421,8 +449,7 @@ async function init() {
 	}
 
 	/**
-	 * Tries to find a peer that has the given chunk. Returns null if none
-	 * found.
+	 * Tries to find a peer that has the given chunk. Returns null if none found.
 	 *
 	 * @param {import('./lib/validate-payload').FileMeta} file
 	 * @param {number} chunkId
@@ -610,4 +637,35 @@ async function init() {
 	window.addEventListener('beforeunload', () => realtime.disconnect())
 	refreshPlaylist(allFiles)
 	setTimeout(syncChunks, 100)
+}
+
+function throttleWithTrailing(fn, delay) {
+	let lastCall = 0
+	let timeout = null
+	let lastArgs = null
+
+	return function (...args) {
+		const now = performance.now()
+		lastArgs = args
+
+		const remaining = delay - (now - lastCall)
+
+		if (remaining <= 0) {
+			// Run immediately
+			if (timeout) {
+				clearTimeout(timeout)
+				timeout = null
+			}
+
+			lastCall = now
+			fn(...args)
+		} else if (!timeout) {
+			// Schedule trailing call
+			timeout = setTimeout(() => {
+				lastCall = performance.now()
+				timeout = null
+				fn(...lastArgs)
+			}, remaining)
+		}
+	}
 }
