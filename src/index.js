@@ -191,8 +191,19 @@ async function init() {
 		// Start playback immediately — iOS requires audio.play() to be called
 		// synchronously within the user-gesture handler. Any await before play()
 		// causes iOS to reject the call and the media session never activates.
+		//
+		// Set basic metadata synchronously before play() so that iOS can
+		// determine the control layout (prev/next track vs. skip-10s) at the
+		// moment playback starts. Without metadata iOS defaults to skip buttons.
 		currentObjectUrl = URL.createObjectURL(blob)
 		audio.src = currentObjectUrl
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title: file?.name ?? id,
+				artist: '',
+				album: '',
+			})
+		}
 		audio.play()
 
 		currentIndex = index
@@ -202,8 +213,8 @@ async function init() {
 		updatePlayButton()
 		highlightTrack(index)
 
-		// Update the media session metadata asynchronously after playback has
-		// started. iOS will pick up metadata set while audio is already playing.
+		// Update metadata asynchronously with full tags and artwork after
+		// playback has started. iOS picks up metadata updates mid-playback.
 		if ('mediaSession' in navigator) {
 			if (!metadataCache.has(id)) {
 				const { common } = await parseBlob(blob)
@@ -226,8 +237,8 @@ async function init() {
 				)
 			navigator.mediaSession.metadata = new MediaMetadata({
 				title: common?.title || (file?.name ?? id),
-				artist: common?.artist || 'Unknown',
-				album: common?.album || 'Unknown',
+				artist: common?.artist,
+				album: common?.album,
 				artwork,
 			})
 		}
@@ -286,47 +297,29 @@ async function init() {
 
 	// ── Media Session action handlers ──────────────────────────────────────
 
-	if ('audioSession' in navigator) {
-		navigator.audioSession.type = 'play'
-	}
+	// https://stackoverflow.com/a/78001443
+	audio.addEventListener('playing', () => {
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.setActionHandler('play', () => {
+				audio.play()
+			})
+			navigator.mediaSession.setActionHandler('pause', () => {
+				audio.pause()
+			})
 
-	if ('mediaSession' in navigator) {
-		navigator.mediaSession.setActionHandler('play', () => {
-			audio.play()
-		})
-		navigator.mediaSession.setActionHandler('pause', () => {
-			audio.pause()
-		})
-
-		// Explicitly disable seeking controls so iOS shows next/prev track
-		// buttons instead of the default seek-backward/seek-forward controls.
-		try {
-			navigator.mediaSession.setActionHandler('seekbackward', null)
-		} catch {
-			// Ignore – browser does not support this action
+			// Only register previoustrack/nexttrack — never register seekbackward,
+			// seekforward, or seekto so that iOS shows next/prev track buttons
+			// instead of the default skip-10-seconds controls.
+			navigator.mediaSession.setActionHandler('previoustrack', () => {
+				if (trackIds.length === 0) return
+				playTrack(currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1)
+			})
+			navigator.mediaSession.setActionHandler('nexttrack', () => {
+				if (trackIds.length === 0) return
+				playTrack((currentIndex + 1) % trackIds.length)
+			})
 		}
-		try {
-			navigator.mediaSession.setActionHandler('seekforward', null)
-		} catch {
-			// Ignore – browser does not support this action
-		}
-		try {
-			navigator.mediaSession.setActionHandler('seekto', null)
-		} catch {
-			// Ignore – browser does not support this action
-		}
-	
-		navigator.mediaSession.setActionHandler('previoustrack', () => {
-			if (trackIds.length === 0) return
-			playTrack(
-				currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
-			)
-		})
-		navigator.mediaSession.setActionHandler('nexttrack', () => {
-			if (trackIds.length === 0) return
-			playTrack((currentIndex + 1) % trackIds.length)
-		})
-	}
+	})
 
 	// ── controls ───────────────────────────────────────────────────────────
 
@@ -428,7 +421,8 @@ async function init() {
 	}
 
 	/**
-	 * Tries to find a peer that has the given chunk. Returns null if none found.
+	 * Tries to find a peer that has the given chunk. Returns null if none
+	 * found.
 	 *
 	 * @param {import('./lib/validate-payload').FileMeta} file
 	 * @param {number} chunkId
