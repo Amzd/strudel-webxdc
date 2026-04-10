@@ -55,5 +55,9 @@
 		"overrides": {
 			"@vitejs/plugin-basic-ssl": "2.0.0"
 		}
+	},
+	"dependencies": {
+		"@webxdc/realtime": "^0.2.2",
+		"dexie": "^4.4.2"
 	}
 }

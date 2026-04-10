@@ -1,19 +1,51 @@
-export type ChatMessagePayload = {
-	type: 'chat_message'
-	data: string
-	senderName: string
+export type FileMeta = {
+	id: string
+	name: string
+	lastModified: number
+	size: number
+	type: string
+	/** Chunk indices still needed; empty when the file is fully available. */
+	pending: Array<number>
 }
 
-export function validateChatMessagePayload(
+export type Chunk = {
+	file: string
+	id: number
+	blob: Blob
+}
+
+export type AppState = {
+	files: Array<FileMeta>
+}
+
+export type PeerRequest = {
+	time: number
+	file: string
+	chunk: number
+	peer: string
+}
+
+export type PeerResponse = {
+	file: string
+	lastModified: number
+	chunk: number
+	data: Uint8Array
+}
+
+export type AppPayload = { request: PeerRequest } | { response: PeerResponse }
+
+export function isRequest(
 	payload: unknown
-): payload is ChatMessagePayload {
-	if (!payload) return false
-	if (typeof payload !== 'object') return false
+): payload is { request: PeerRequest } {
+	if (typeof payload !== 'object' || payload === null) return false
+	const p = payload as Record<string, unknown>
+	return typeof p['request'] === 'object' && p['request'] !== null
+}
 
-	const typeIsValid = 'type' in payload && payload.type === 'chat_message'
-	const dataIsValid = 'data' in payload && typeof payload.data === 'string'
-	const senderNameIsValid =
-		'senderName' in payload && typeof payload.senderName === 'string'
-
-	return typeIsValid && dataIsValid && senderNameIsValid
+export function isResponse(
+	payload: unknown
+): payload is { response: PeerResponse } {
+	if (typeof payload !== 'object' || payload === null) return false
+	const p = payload as Record<string, unknown>
+	return typeof p['response'] === 'object' && p['response'] !== null
 }
