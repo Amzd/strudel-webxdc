@@ -1,4 +1,5 @@
 import { RealTime } from '@webxdc/realtime'
+import { parseBlob } from 'music-metadata'
 
 import { CHUNK_SIZE, db, getDownloadProgress } from './lib/storage'
 import { isRequest, isResponse } from './lib/validate-payload'
@@ -53,7 +54,30 @@ async function init() {
 	/** @type {Map<string, HTMLButtonElement>} */
 	const trackElements = new Map()
 
+	/**
+	 * Cache of parsed metadata per file ID. Stores both the raw common tags and
+	 * the pre-computed artwork data URLs.
+	 *
+	 * @type {Map<
+	 * 	string,
+	 * 	{
+	 * 		common: import('music-metadata').ICommonTagsResult
+	 * 		artwork: MediaImage[]
+	 * 	}
+	 * >}
+	 */
+	const metadataCache = new Map()
 	// ── helpers ────────────────────────────────────────────────────────────
+
+	/** @param {Blob} blob @returns {Promise<string>} */
+	function blobToDataURL(blob) {
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader()
+			reader.onload = () => resolve(/** @type {string} */ (reader.result))
+			reader.onerror = reject
+			reader.readAsDataURL(blob)
+		})
+	}
 
 	const ICON_PLAY =
 		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
@@ -161,17 +185,52 @@ async function init() {
 			chunks.map((c) => c.blob),
 			{ type: 'audio/mpeg' }
 		)
+
+		const file = (realtime.getState()?.files ?? []).find((f) => f.id === id)
+
+		// Start playback immediately — iOS requires audio.play() to be called
+		// synchronously within the user-gesture handler. Any await before play()
+		// causes iOS to reject the call and the media session never activates.
 		currentObjectUrl = URL.createObjectURL(blob)
 		audio.src = currentObjectUrl
 		audio.play()
 
-		const file = (realtime.getState()?.files ?? []).find((f) => f.id === id)
 		currentIndex = index
 		isPlaying = true
 		nowPlaying.textContent = file?.name ?? id
 		playBtn.disabled = false
 		updatePlayButton()
 		highlightTrack(index)
+
+		// Update the media session metadata asynchronously after playback has
+		// started. iOS will pick up metadata set while audio is already playing.
+		if ('mediaSession' in navigator) {
+			if (!metadataCache.has(id)) {
+				const { common } = await parseBlob(blob)
+				const artwork = await Promise.all(
+					(common?.picture ?? []).map(async (pic) => {
+						const dataUrl = await blobToDataURL(
+							new Blob([pic.data], { type: pic.format })
+						)
+						return /** @type {MediaImage} */ ({
+							src: dataUrl,
+							type: pic.format,
+						})
+					})
+				)
+				metadataCache.set(id, { common, artwork })
+			}
+			const { common, artwork } =
+				/** @type {NonNullable<ReturnType<typeof metadataCache.get>>} */ (
+					metadataCache.get(id)
+				)
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title: common?.title || (file?.name ?? id),
+				artist: common?.artist || 'Unknown',
+				album: common?.album || 'Unknown',
+				artwork,
+			})
+		}
 	}
 
 	function togglePlay() {
@@ -198,6 +257,9 @@ async function init() {
 		} else {
 			isPlaying = false
 			updatePlayButton()
+			if ('mediaSession' in navigator) {
+				navigator.mediaSession.playbackState = 'none'
+			}
 		}
 	})
 
@@ -216,12 +278,39 @@ async function init() {
 	audio.addEventListener('play', () => {
 		isPlaying = true
 		updatePlayButton()
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'playing'
+		}
 	})
 
 	audio.addEventListener('pause', () => {
 		isPlaying = false
 		updatePlayButton()
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = 'paused'
+		}
 	})
+
+	// ── Media Session action handlers ──────────────────────────────────────
+
+	if ('audioSession' in navigator) {
+		navigator.audioSession.type = 'play'
+	}
+
+	if ('mediaSession' in navigator) {
+		navigator.mediaSession.setActionHandler('play', () => {
+			audio.play()
+		})
+		navigator.mediaSession.setActionHandler('pause', () => {
+			audio.pause()
+		})
+		navigator.mediaSession.setActionHandler('previoustrack', () => {
+			if (currentIndex > 0) playTrack(currentIndex - 1)
+		})
+		navigator.mediaSession.setActionHandler('nexttrack', () => {
+			if (currentIndex < trackIds.length - 1) playTrack(currentIndex + 1)
+		})
+	}
 
 	// ── controls ───────────────────────────────────────────────────────────
 
