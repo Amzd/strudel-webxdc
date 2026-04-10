@@ -659,10 +659,14 @@ async function init() {
             trySyncToPeer(realtime.getPeers()).then((syncedToPeer) => {
                 if (!syncedToPeer) {
                     broadcastPlayback()
+                    const songCount = (
+                        realtime.getState() ?? { files: [] }
+                    ).files.length
                     window.webxdc.sendUpdate(
                         {
                             payload: null,
                             info: `${window.webxdc.selfName} started a jam!`,
+                            summary: `${songCount} song${songCount === 1 ? '' : 's'}`,
                         },
                         ''
                     )
@@ -728,7 +732,15 @@ async function init() {
         applyPlaylistName(newName)
         const state = realtime.getState() ?? { files: [], nowPlaying: null }
         realtime.setState({ ...state, playlistName: newName })
-        window.webxdc.sendUpdate({ payload: null, document: newName }, '')
+        const songCount = state.files.length
+        window.webxdc.sendUpdate(
+            {
+                payload: null,
+                document: newName,
+                summary: `${songCount} song${songCount === 1 ? '' : 's'}`,
+            },
+            ''
+        )
     })
 
     uploadBtn.addEventListener('click', () => fileInput.click())
