@@ -1,18 +1,7 @@
 import { RealTime } from '@webxdc/realtime'
 
-import {
-	CHUNK_SIZE,
-	deleteTrackChunks,
-	getAllTrackFilenames,
-	getAllTrackMetas,
-	getChunkBlob,
-	getTrackBlob,
-	hasTrack,
-	storeChunkBlob,
-	storeTrack,
-	storeTrackMeta,
-} from './lib/storage'
-import { isChunkRequest, isChunkResponse } from './lib/validate-payload'
+import { CHUNK_SIZE, db, getDownloadProgress } from './lib/storage'
+import { isRequest, isResponse } from './lib/validate-payload'
 
 init()
 
@@ -51,14 +40,18 @@ async function init() {
 		document.getElementById('duration')
 	)
 
-	/** @type {string[]} */
-	let tracks = []
+	/** @type {string[]} File IDs in playlist order. */
+	let trackIds = []
 	let currentIndex = -1
 	let isPlaying = false
 	/** @type {string | null} */
 	let currentObjectUrl = null
 
 	const audio = new Audio()
+
+	/** Map from file ID to its playlist button element. */
+	/** @type {Map<string, HTMLButtonElement>} */
+	const trackElements = new Map()
 
 	// ── helpers ────────────────────────────────────────────────────────────
 
@@ -82,48 +75,102 @@ async function init() {
 			.forEach((el, i) => el.classList.toggle('active', i === index))
 	}
 
-	/** @param {string} filename */
-	function addToPlaylistUI(filename) {
+	/**
+	 * Updates a playlist button to show current download progress.
+	 *
+	 * @param {HTMLButtonElement} el
+	 * @param {import('./lib/validate-payload').FileMeta} file
+	 */
+	function updateTrackElement(el, file) {
+		const pct = getDownloadProgress(file)
+		if (pct < 100) {
+			el.textContent = pct + '% \u2014 ' + file.name
+			el.classList.add('downloading')
+		} else {
+			el.textContent = file.name
+			el.classList.remove('downloading')
+		}
+	}
+
+	/**
+	 * Adds a new track button to the playlist.
+	 *
+	 * @param {import('./lib/validate-payload').FileMeta} file
+	 */
+	function addTrackToPlaylist(file) {
 		emptyMsg.hidden = true
 		const item = document.createElement('button')
 		item.className = 'playlist-item'
-		item.textContent = filename
 		item.type = 'button'
+		updateTrackElement(item, file)
+		const fileId = file.id
 		item.addEventListener('click', () => {
-			const index = tracks.indexOf(filename)
+			if (item.classList.contains('downloading')) return
+			const index = trackIds.indexOf(fileId)
 			if (index !== -1) playTrack(index)
 		})
 		playlist.appendChild(item)
+		trackIds.push(file.id)
+		trackElements.set(file.id, item)
+	}
+
+	/**
+	 * Syncs the playlist DOM with the given file list. Adds buttons for new
+	 * tracks and updates progress indicators on existing ones.
+	 *
+	 * @param {import('./lib/validate-payload').FileMeta[]} files
+	 */
+	function refreshPlaylist(files) {
+		for (const file of files) {
+			if (file.size <= 0) continue
+			const el = trackElements.get(file.id)
+			if (!el) {
+				addTrackToPlaylist(file)
+			} else {
+				updateTrackElement(el, file)
+			}
+		}
 	}
 
 	/** @param {number} index */
 	async function playTrack(index) {
-		if (index < 0 || index >= tracks.length) return
+		if (index < 0 || index >= trackIds.length) return
 
-		const filename = tracks[index]
-		if (!filename) return
-		const blob = await getTrackBlob(filename)
-		if (!blob) return
+		const id = trackIds[index]
+		if (!id) return
+
+		// Don't attempt playback if the track is still downloading.
+		const el = trackElements.get(id)
+		if (el?.classList.contains('downloading')) return
+
+		/** @type {import('./lib/validate-payload').Chunk[]} */
+		const chunks = await db.chunks.where('file').equals(id).sortBy('id')
+		if (!chunks.length) return
 
 		if (currentObjectUrl) {
 			URL.revokeObjectURL(currentObjectUrl)
 			currentObjectUrl = null
 		}
 
+		const blob = new Blob(
+			chunks.map((c) => c.blob),
+			{ type: 'audio/mpeg' }
+		)
 		currentObjectUrl = URL.createObjectURL(blob)
 		audio.src = currentObjectUrl
 		audio.play()
 
+		const file = (realtime.getState()?.files ?? []).find((f) => f.id === id)
 		currentIndex = index
 		isPlaying = true
-		nowPlaying.textContent = filename
+		nowPlaying.textContent = file?.name ?? id
 		playBtn.disabled = false
 		updatePlayButton()
 		highlightTrack(index)
 	}
 
 	function togglePlay() {
-		if (currentIndex === -1 && tracks.length > 0) {
+		if (currentIndex === -1 && trackIds.length > 0) {
 			playTrack(0)
 			return
 		}
@@ -141,7 +188,7 @@ async function init() {
 
 	audio.addEventListener('ended', () => {
 		const nextIndex = currentIndex + 1
-		if (nextIndex < tracks.length) {
+		if (nextIndex < trackIds.length) {
 			playTrack(nextIndex)
 		} else {
 			isPlaying = false
@@ -180,7 +227,7 @@ async function init() {
 	})
 
 	nextBtn.addEventListener('click', () => {
-		if (currentIndex < tracks.length - 1) playTrack(currentIndex + 1)
+		if (currentIndex < trackIds.length - 1) playTrack(currentIndex + 1)
 	})
 
 	progressBar.addEventListener('input', () => {
@@ -202,47 +249,44 @@ async function init() {
 	})
 
 	/**
-	 * Stores a file locally and advertises it to peers via realtime state so they
-	 * can pull it chunk by chunk.
+	 * Stores a file as chunks in IndexedDB and advertises it to peers via
+	 * realtime state so they can pull it chunk by chunk.
 	 *
 	 * @param {File} file
 	 */
 	async function sendFile(file) {
 		const id = crypto.randomUUID()
-		const chunkCount = Math.ceil(file.size / CHUNK_SIZE)
 		const lastModified = file.lastModified || Date.now()
 
-		// Store the full blob immediately so it is playable right away and so we
-		// can serve chunk requests by slicing without keeping separate chunk blobs.
-		await storeTrack(file.name, file)
-
-		/** @satisfies {import('./lib/validate-payload').TrackMeta} */
+		/** @satisfies {import('./lib/validate-payload').FileMeta} */
 		const meta = {
 			id,
-			filename: file.name,
-			size: file.size,
-			chunkCount,
+			name: file.name,
 			lastModified,
-			pending: [], // We have all chunks.
-		}
-		await storeTrackMeta(meta)
-
-		if (!tracks.includes(file.name)) {
-			tracks.push(file.name)
-			addToPlaylistUI(file.name)
+			size: file.size,
+			type: file.type,
+			pending: [],
 		}
 
-		// Broadcast to peers so they can start requesting chunks.
-		const state = realtime.getState()
-		const existingTracks = state?.tracks ?? []
-		realtime.setState({ tracks: [...existingTracks, meta] })
+		await db.files.add(meta)
+
+		const chunkCount = Math.ceil(file.size / CHUNK_SIZE)
+		for (let i = 0; i < chunkCount; i++) {
+			const start = i * CHUNK_SIZE
+			const end = Math.min(start + CHUNK_SIZE, file.size)
+			await db.chunks.add({ file: id, id: i, blob: file.slice(start, end) })
+		}
+
+		const currentFiles = realtime.getState()?.files ?? []
+		realtime.setState({ files: [...currentFiles, meta] })
+		refreshPlaylist([meta])
 	}
 
 	// ── realtime sync ──────────────────────────────────────────────────────
 
 	// currentRequest is read/written only in syncChunks and handlePayload, both
 	// of which run on the JS single-threaded event loop, so no locking is needed.
-	/** @type {import('./lib/validate-payload').ChunkRequest | null} */
+	/** @type {import('./lib/validate-payload').PeerRequest | null} */
 	let currentRequest = null
 
 	/** Milliseconds before a chunk request is considered timed-out. */
@@ -253,7 +297,7 @@ async function init() {
 	const SYNC_POLL_IDLE_MS = 100
 
 	/**
-	 * Fisher-Yates shuffle – returns a new array.
+	 * Fisher-Yates shuffle - returns a new array.
 	 *
 	 * @template T
 	 * @param {T[]} arr
@@ -272,26 +316,25 @@ async function init() {
 	}
 
 	/**
-	 * Tries to find a peer who can serve `chunkIndex` for the given track.
-	 * Returns null if no peer is available.
+	 * Tries to find a peer that has the given chunk. Returns null if none found.
 	 *
-	 * @param {import('./lib/validate-payload').TrackMeta} meta
-	 * @param {number} chunkIndex
+	 * @param {import('./lib/validate-payload').FileMeta} file
+	 * @param {number} chunkId
 	 *
-	 * @returns {import('./lib/validate-payload').ChunkRequest | null}
+	 * @returns {import('./lib/validate-payload').PeerRequest | null}
 	 */
-	function createRequest(meta, chunkIndex) {
+	function createRequest(file, chunkId) {
 		for (const peer of shuffle(realtime.getPeers())) {
-			const peerFile = peer.state?.tracks?.find((t) => t.id === meta.id)
+			const peerFile = peer.state?.files?.find((f) => f.id === file.id)
 			if (
 				peerFile &&
-				peerFile.lastModified === meta.lastModified &&
-				!peerFile.pending.includes(chunkIndex)
+				peerFile.lastModified === file.lastModified &&
+				peerFile.pending.indexOf(chunkId) < 0
 			) {
 				return {
 					time: Date.now(),
-					trackId: meta.id,
-					chunkIndex,
+					file: file.id,
+					chunk: chunkId,
 					peer: peer.id,
 				}
 			}
@@ -309,12 +352,11 @@ async function init() {
 			Date.now() - currentRequest.time > CHUNK_REQUEST_TIMEOUT_MS
 		) {
 			let request = null
-			const state = realtime.getState()
-			const myTracks = state?.tracks ?? []
-			outer: for (const meta of myTracks) {
-				if (meta.pending.length > 0) {
-					for (const chunkIndex of shuffle(meta.pending)) {
-						request = createRequest(meta, chunkIndex)
+			const files = realtime.getState()?.files ?? []
+			outer: for (const file of files) {
+				if (file.pending.length > 0) {
+					for (const chunkId of shuffle(file.pending)) {
+						request = createRequest(file, chunkId)
 						if (request) break outer
 					}
 				}
@@ -331,28 +373,6 @@ async function init() {
 	}
 
 	/**
-	 * Assembles a fully-received track from its in-progress chunk blobs, stores
-	 * it in the assembled-track store, cleans up, and adds it to the playlist.
-	 *
-	 * @param {import('./lib/validate-payload').TrackMeta} meta
-	 */
-	async function assembleTrack(meta) {
-		const parts = []
-		for (let i = 0; i < meta.chunkCount; i++) {
-			const chunk = await getChunkBlob(meta.id, i, null)
-			if (chunk) parts.push(chunk)
-		}
-		const blob = new Blob(parts, { type: 'audio/mpeg' })
-		await storeTrack(meta.filename, blob)
-		await deleteTrackChunks(meta.id)
-
-		if (!tracks.includes(meta.filename)) {
-			tracks.push(meta.filename)
-			addToPlaylistUI(meta.filename)
-		}
-	}
-
-	/**
 	 * Discovers new tracks from connected peers and queues them for download.
 	 *
 	 * @param {import('@webxdc/realtime').Peer<
@@ -360,43 +380,47 @@ async function init() {
 	 * >[]} peers
 	 */
 	async function syncFileList(peers) {
-		const state = realtime.getState()
-		const myTracks = state?.tracks ?? []
+		const files = realtime.getState()?.files ?? []
 		let changed = false
 
 		for (const peer of peers) {
-			const peerTracks = peer.state?.tracks ?? []
-			for (const peerTrack of peerTracks) {
-				if (peerTrack.size <= 0) continue
-				const existing = myTracks.find((t) => t.id === peerTrack.id)
-				if (!existing) {
-					// New track discovered from a peer.
-					const { id, filename, size, chunkCount, lastModified } = peerTrack
-					const alreadyAssembled = await hasTrack(filename)
-					const newMeta = {
-						id,
-						filename,
-						size,
-						chunkCount,
-						lastModified,
-						// If already assembled, no chunks are pending; otherwise queue all.
-						pending: alreadyAssembled
-							? []
-							: Array.from({ length: chunkCount }, (_, i) => i),
+			const peerFiles = peer.state?.files ?? []
+			for (let peerFile of peerFiles) {
+				const myFile = files.find((f) => f.id === peerFile.id)
+				if (!myFile) {
+					// New file from peer - queue all chunks for download.
+					peerFile = { ...peerFile, pending: [] }
+					const chunkCount = Math.ceil(peerFile.size / CHUNK_SIZE)
+					for (let i = 0; i < chunkCount; i++) {
+						peerFile.pending.push(i)
 					}
-					await storeTrackMeta(newMeta)
-					myTracks.push(newMeta)
-					if (alreadyAssembled && !tracks.includes(filename)) {
-						tracks.push(filename)
-						addToPlaylistUI(filename)
+					await db.files.add(peerFile)
+					files.push(peerFile)
+					changed = true
+				} else if (myFile.lastModified < peerFile.lastModified) {
+					// File was updated - reset and re-download all chunks.
+					peerFile = { ...peerFile, pending: [] }
+					if (peerFile.size > 0) {
+						const chunkCount = Math.ceil(peerFile.size / CHUNK_SIZE)
+						for (let i = 0; i < chunkCount; i++) {
+							peerFile.pending.push(i)
+						}
 					}
+					await db.files.put(peerFile)
+					await db.chunks.where('file').equals(peerFile.id).delete()
+					myFile.name = peerFile.name
+					myFile.pending = peerFile.pending
+					myFile.lastModified = peerFile.lastModified
+					myFile.size = peerFile.size
+					myFile.type = peerFile.type
 					changed = true
 				}
 			}
 		}
 
 		if (changed) {
-			realtime.setState({ tracks: myTracks })
+			realtime.setState({ files })
+			refreshPlaylist(files)
 		}
 	}
 
@@ -407,65 +431,52 @@ async function init() {
 	 * @param {unknown} payload
 	 */
 	async function handlePayload(_deviceId, payload) {
-		if (isChunkRequest(payload)) {
-			const { request } = payload
+		if (isRequest(payload)) {
+			const { request: req } = payload
 			// Only the targeted peer responds.
-			if (request.peer !== realtime.getDeviceId()) return
+			if (req.peer !== realtime.getDeviceId()) return
 
-			const meta = realtime
-				.getState()
-				?.tracks?.find((t) => t.id === request.trackId)
-			if (!meta) return
-
-			const chunkBlob = await getChunkBlob(
-				request.trackId,
-				request.chunkIndex,
-				meta.filename
-			)
-			if (!chunkBlob) return
-
-			const data = new Uint8Array(await chunkBlob.arrayBuffer())
-			realtime.sendPayload({
-				response: {
-					trackId: request.trackId,
-					lastModified: meta.lastModified,
-					chunkIndex: request.chunkIndex,
-					data,
-				},
-			})
-		} else if (isChunkResponse(payload)) {
-			const { response } = payload
-			const state = realtime.getState()
-			if (!state) return
-
-			const meta = state.tracks.find((t) => t.id === response.trackId)
-			if (!meta) return
-			if (meta.lastModified !== response.lastModified) return
-			if (!meta.pending.includes(response.chunkIndex)) return
-
-			await storeChunkBlob(
-				response.trackId,
-				response.chunkIndex,
-				new Blob([response.data])
-			)
-
-			meta.pending = meta.pending.filter((i) => i !== response.chunkIndex)
-			await storeTrackMeta(meta)
-
-			const updatedTracks = state.tracks.map((t) =>
-				t.id === response.trackId ? meta : t
-			)
-			realtime.setState({ tracks: updatedTracks })
-
-			if (
-				currentRequest?.trackId === response.trackId &&
-				currentRequest?.chunkIndex === response.chunkIndex
-			) {
-				currentRequest = null
+			const file = await db.files.where('id').equals(req.file).first()
+			if (file) {
+				const chunk = await db.chunks
+					.where({ file: req.file, id: req.chunk })
+					.first()
+				if (chunk) {
+					const data = new Uint8Array(await chunk.blob.arrayBuffer())
+					realtime.sendPayload({
+						response: {
+							file: req.file,
+							lastModified: file.lastModified,
+							chunk: req.chunk,
+							data,
+						},
+					})
+				}
 			}
-
-			if (meta.pending.length === 0) {
-				await assembleTrack(meta)
+		} else if (isResponse(payload)) {
+			const { response: res } = payload
+			const files = realtime.getState()?.files ?? []
+			const file = files.find((f) => f.id === res.file)
+			if (
+				file &&
+				file.lastModified === res.lastModified &&
+				file.pending.indexOf(res.chunk) >= 0
+			) {
+				file.pending = file.pending.filter((c) => c !== res.chunk)
+				await db.files.put(file)
+				await db.chunks.put({
+					file: res.file,
+					id: res.chunk,
+					blob: new Blob([res.data]),
+				})
+				if (
+					currentRequest?.file === res.file &&
+					currentRequest?.chunk === res.chunk
+				) {
+					currentRequest = null
+				}
+				realtime.setState({ files })
+				refreshPlaylist(files)
 			}
 		}
 	}
@@ -485,22 +496,12 @@ async function init() {
 		},
 	})
 
-	// ── load tracks already in IndexedDB ──────────────────────────────────
+	// ── startup ────────────────────────────────────────────────────────────
 
-	const storedFilenames = await getAllTrackFilenames()
-	for (const filename of storedFilenames) {
-		if (!tracks.includes(filename)) {
-			tracks.push(filename)
-			addToPlaylistUI(filename)
-		}
-	}
-
-	// Rebuild realtime state from persisted metadata so peers immediately see
-	// our available tracks when we connect.
-	const allMetas = await getAllTrackMetas()
-	realtime.setState({ tracks: allMetas })
+	const allFiles = await db.files.toArray()
+	realtime.setState({ files: allFiles })
 	realtime.connect()
 	window.addEventListener('beforeunload', () => realtime.disconnect())
-
+	refreshPlaylist(allFiles)
 	setTimeout(syncChunks, 100)
 }

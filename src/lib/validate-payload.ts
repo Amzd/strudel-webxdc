@@ -1,46 +1,50 @@
-/** Metadata for a single track, shared with all peers via realtime state. */
-export type TrackMeta = {
+export type FileMeta = {
 	id: string
-	filename: string
-	size: number
-	chunkCount: number
+	name: string
 	lastModified: number
-	/** Chunk indices still needed; empty when the track is fully available. */
+	size: number
+	type: string
+	/** Chunk indices still needed; empty when the file is fully available. */
 	pending: Array<number>
 }
 
-export type AppState = {
-	tracks: Array<TrackMeta>
+export type Chunk = {
+	file: string
+	id: number
+	blob: Blob
 }
 
-export type ChunkRequest = {
+export type AppState = {
+	files: Array<FileMeta>
+}
+
+export type PeerRequest = {
 	time: number
-	trackId: string
-	chunkIndex: number
-	/** Device ID of the peer that should respond to this request. */
+	file: string
+	chunk: number
 	peer: string
 }
 
-export type ChunkResponse = {
-	trackId: string
+export type PeerResponse = {
+	file: string
 	lastModified: number
-	chunkIndex: number
+	chunk: number
 	data: Uint8Array
 }
 
-export type AppPayload = { request: ChunkRequest } | { response: ChunkResponse }
+export type AppPayload = { request: PeerRequest } | { response: PeerResponse }
 
-export function isChunkRequest(
+export function isRequest(
 	payload: unknown
-): payload is { request: ChunkRequest } {
+): payload is { request: PeerRequest } {
 	if (typeof payload !== 'object' || payload === null) return false
 	const p = payload as Record<string, unknown>
 	return typeof p['request'] === 'object' && p['request'] !== null
 }
 
-export function isChunkResponse(
+export function isResponse(
 	payload: unknown
-): payload is { response: ChunkResponse } {
+): payload is { response: PeerResponse } {
 	if (typeof payload !== 'object' || payload === null) return false
 	const p = payload as Record<string, unknown>
 	return typeof p['response'] === 'object' && p['response'] !== null
