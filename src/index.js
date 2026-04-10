@@ -234,7 +234,7 @@ async function init() {
 		item.addEventListener('click', () => {
 			if (item.classList.contains('downloading')) return
 			const index = trackIds.indexOf(fileId)
-			if (index !== -1) playTrack(index)
+			if (index !== -1) playTrack(index).then(broadcastPlayback)
 		})
 		playlist.appendChild(item)
 		trackIds.push(file.id)
