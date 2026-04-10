@@ -55,6 +55,11 @@ async function init() {
 
 	// ── helpers ────────────────────────────────────────────────────────────
 
+	const ICON_PLAY =
+		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>'
+	const ICON_PAUSE =
+		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+
 	/** @param {number} seconds */
 	function formatTime(seconds) {
 		if (!isFinite(seconds)) return '0:00'
@@ -64,7 +69,7 @@ async function init() {
 	}
 
 	function updatePlayButton() {
-		playBtn.textContent = isPlaying ? '⏸' : '▶'
+		playBtn.innerHTML = isPlaying ? ICON_PAUSE : ICON_PLAY
 		playBtn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Play')
 	}
 

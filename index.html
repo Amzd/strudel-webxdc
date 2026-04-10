@@ -149,6 +149,13 @@
 				line-height: 1;
 			}
 
+			#player-controls button svg {
+				width: 1em;
+				height: 1em;
+				display: block;
+				pointer-events: none;
+			}
+
 			#player-controls button:disabled {
 				opacity: 0.35;
 				cursor: default;
@@ -204,11 +211,11 @@
 		<footer id="player">
 			<span id="now-playing">Nothing playing</span>
 			<div id="player-controls">
-				<button id="prev-btn" type="button" aria-label="Previous">⏮</button>
+				<button id="prev-btn" type="button" aria-label="Previous"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
 				<button id="play-btn" type="button" disabled aria-label="Play">
-					▶
+					<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
 				</button>
-				<button id="next-btn" type="button" aria-label="Next">⏭</button>
+				<button id="next-btn" type="button" aria-label="Next"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg></button>
 			</div>
 			<div id="progress-container">
 				<span id="current-time">0:00</span>
