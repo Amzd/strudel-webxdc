@@ -251,15 +251,8 @@ async function init() {
 	// ── audio events ───────────────────────────────────────────────────────
 
 	audio.addEventListener('ended', () => {
-		const nextIndex = currentIndex + 1
-		if (nextIndex < trackIds.length) {
-			playTrack(nextIndex)
-		} else {
-			isPlaying = false
-			updatePlayButton()
-			if ('mediaSession' in navigator) {
-				navigator.mediaSession.playbackState = 'none'
-			}
+		if (trackIds.length > 0) {
+			playTrack((currentIndex + 1) % trackIds.length)
 		}
 	})
 
@@ -304,11 +297,34 @@ async function init() {
 		navigator.mediaSession.setActionHandler('pause', () => {
 			audio.pause()
 		})
+
+		// Explicitly disable seeking controls so iOS shows next/prev track
+		// buttons instead of the default seek-backward/seek-forward controls.
+		try {
+			navigator.mediaSession.setActionHandler('seekbackward', null)
+		} catch {
+			// Ignore – browser does not support this action
+		}
+		try {
+			navigator.mediaSession.setActionHandler('seekforward', null)
+		} catch {
+			// Ignore – browser does not support this action
+		}
+		try {
+			navigator.mediaSession.setActionHandler('seekto', null)
+		} catch {
+			// Ignore – browser does not support this action
+		}
+	
 		navigator.mediaSession.setActionHandler('previoustrack', () => {
-			if (currentIndex > 0) playTrack(currentIndex - 1)
+			if (trackIds.length === 0) return
+			playTrack(
+				currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
+			)
 		})
 		navigator.mediaSession.setActionHandler('nexttrack', () => {
-			if (currentIndex < trackIds.length - 1) playTrack(currentIndex + 1)
+			if (trackIds.length === 0) return
+			playTrack((currentIndex + 1) % trackIds.length)
 		})
 	}
 
@@ -317,11 +333,13 @@ async function init() {
 	playBtn.addEventListener('click', togglePlay)
 
 	prevBtn.addEventListener('click', () => {
-		if (currentIndex > 0) playTrack(currentIndex - 1)
+		if (trackIds.length === 0) return
+		playTrack(currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1)
 	})
 
 	nextBtn.addEventListener('click', () => {
-		if (currentIndex < trackIds.length - 1) playTrack(currentIndex + 1)
+		if (trackIds.length === 0) return
+		playTrack((currentIndex + 1) % trackIds.length)
 	})
 
 	progressBar.addEventListener('input', () => {
