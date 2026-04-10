@@ -14,8 +14,18 @@ export type Chunk = {
 	blob: Blob
 }
 
+export type NowPlaying = {
+	fileId: string
+	isPlaying: boolean
+	/** Audio position (seconds) at the moment the state was broadcast. */
+	currentTime: number
+	/** Wall-clock timestamp (ms) when this state was last updated. */
+	actionTime: number
+}
+
 export type AppState = {
 	files: Array<FileMeta>
+	nowPlaying: NowPlaying | null
 }
 
 export type PeerRequest = {

@@ -25,6 +25,9 @@ async function init() {
 	const playBtn = /** @type {HTMLButtonElement} */ (
 		document.getElementById('play-btn')
 	)
+	const syncBtn = /** @type {HTMLButtonElement} */ (
+		document.getElementById('sync-btn')
+	)
 	const prevBtn = /** @type {HTMLButtonElement} */ (
 		document.getElementById('prev-btn')
 	)
@@ -46,6 +49,8 @@ async function init() {
 	let currentIndex = -1
 	let isPlaying = false
 	let isSeeking = false
+	/** Whether the user has enabled shared-playback sync with peers. */
+	let isSyncing = false
 	/** @type {string | null} */
 	let currentObjectUrl = null
 
@@ -78,6 +83,98 @@ async function init() {
 			reader.onerror = reject
 			reader.readAsDataURL(blob)
 		})
+	}
+
+	/**
+	 * Pushes current playback position into the shared realtime state so peers
+	 * can see what is playing. Publishes null when sync is disabled so peers know
+	 * this device is listening solo.
+	 */
+	function broadcastPlayback() {
+		const state = realtime.getState() ?? { files: [], nowPlaying: null }
+		const fileId = currentIndex >= 0 ? (trackIds[currentIndex] ?? null) : null
+		realtime.setState({
+			...state,
+			nowPlaying:
+				isSyncing && fileId
+					? {
+							fileId,
+							isPlaying: isPlaying,
+							currentTime: audio.currentTime,
+							actionTime: Date.now(),
+						}
+					: null,
+		})
+	}
+
+	const ICON_SOLO =
+		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>'
+	const ICON_SYNC =
+		'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>'
+
+	/** Reflects the current isSyncing state on the button element. */
+	function updateSyncButton() {
+		syncBtn.innerHTML = isSyncing ? ICON_SYNC : ICON_SOLO
+		syncBtn.setAttribute(
+			'aria-label',
+			isSyncing ? 'Syncing with peers' : 'Listen solo'
+		)
+		syncBtn.setAttribute('aria-pressed', String(isSyncing))
+	}
+
+	let lastSync = 0
+	/**
+	 * If sync is enabled and a peer is actively playing a fully-downloaded track
+	 * while we are idle, start playing at the peer's current position. Only
+	 * follows the peer with the newest actionTime, and only when that actionTime
+	 * is newer than our own nowPlaying.actionTime.
+	 *
+	 * @param {import('@webxdc/realtime').Peer<
+	 * 	import('./lib/validate-payload').AppState
+	 * >[]} peers
+	 */
+	async function trySyncToPeer(peers) {
+		if (!isSyncing) return
+		const state = realtime.getState()
+		const files = state?.files ?? []
+		const myActionTime = state?.nowPlaying?.actionTime ?? 0
+
+		// Find the peer with the newest actionTime that is still playing.
+		/** @type {import('./lib/validate-payload').NowPlaying | null} */
+		let bestNp = null
+		for (const peer of peers) {
+			const np = peer.state?.nowPlaying
+			if (!np) continue
+			if (np.actionTime <= myActionTime) continue
+			const file = files.find((f) => f.id === np.fileId)
+			if (!file || file.pending.length > 0) continue
+			if (trackIds.indexOf(np.fileId) === -1) continue
+			if (!bestNp || np.actionTime > bestNp.actionTime) bestNp = np
+		}
+
+		if (!bestNp) return
+		if (bestNp.actionTime <= lastSync) return
+		lastSync = bestNp.actionTime
+
+		let index = trackIds.indexOf(bestNp.fileId)
+		await playTrack(index)
+		const elapsed = (Date.now() - bestNp.actionTime) / 1000
+		let seekTo = bestNp.currentTime + elapsed
+		while (seekTo >= audio.duration) {
+			seekTo -= audio.duration
+			index += 1
+			await playTrack(index)
+		}
+		if (isFinite(audio.duration) && seekTo < audio.duration) {
+			audio.currentTime = seekTo
+			while (audio.currentTime < seekTo) {
+				audio.currentTime = seekTo
+				await new Promise((r) => setTimeout(r, 10))
+			}
+		}
+		if (!bestNp.isPlaying) audio.pause()
+
+		return true
 	}
 
 	const ICON_PLAY =
@@ -162,6 +259,14 @@ async function init() {
 		}
 	}
 
+	function setAudioSrc(src) {
+		return new Promise((resolve) => {
+			audio.src = src
+			audio.load()
+			audio.addEventListener('canplaythrough', resolve, { once: true })
+		})
+	}
+
 	/** @param {number} index */
 	async function playTrack(index) {
 		if (index < 0 || index >= trackIds.length) return
@@ -197,7 +302,7 @@ async function init() {
 		// determine the control layout (prev/next track vs. skip-10s) at the
 		// moment playback starts. Without metadata iOS defaults to skip buttons.
 		currentObjectUrl = URL.createObjectURL(blob)
-		audio.src = currentObjectUrl
+		await setAudioSrc(currentObjectUrl)
 		if ('mediaSession' in navigator) {
 			navigator.mediaSession.metadata = new MediaMetadata({
 				title: file?.name ?? id,
@@ -205,9 +310,9 @@ async function init() {
 				album: '',
 			})
 		}
-		audio.play()
-
+		// Set currentIndex before play() so the 'play' event sees the correct track.
 		currentIndex = index
+		audio.play()
 		isPlaying = true
 		nowPlaying.textContent = file?.name ?? id
 		playBtn.disabled = false
@@ -243,21 +348,6 @@ async function init() {
 				artwork,
 			})
 		}
-	}
-
-	function togglePlay() {
-		if (currentIndex === -1 && trackIds.length > 0) {
-			playTrack(0)
-			return
-		}
-		if (isPlaying) {
-			audio.pause()
-			isPlaying = false
-		} else {
-			audio.play()
-			isPlaying = true
-		}
-		updatePlayButton()
 	}
 
 	// ── audio events ───────────────────────────────────────────────────────
@@ -326,16 +416,42 @@ async function init() {
 
 	// ── controls ───────────────────────────────────────────────────────────
 
-	playBtn.addEventListener('click', togglePlay)
+	playBtn.addEventListener('click', () => {
+		if (currentIndex === -1 && trackIds.length > 0) {
+			playTrack(0)
+			return
+		}
+		if (isPlaying) {
+			audio.pause()
+			isPlaying = false
+		} else {
+			audio.play()
+			isPlaying = true
+		}
+		updatePlayButton()
+		broadcastPlayback()
+	})
+
+	syncBtn.addEventListener('click', () => {
+		isSyncing = !isSyncing
+		updateSyncButton()
+		if (isSyncing) {
+			trySyncToPeer(realtime.getPeers()).then((syncedToPeer) => {
+				if (!syncedToPeer) broadcastPlayback()
+			})
+		}
+	})
 
 	prevBtn.addEventListener('click', () => {
 		if (trackIds.length === 0) return
-		playTrack(currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1)
+		playTrack(currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1).then(
+			broadcastPlayback
+		)
 	})
 
 	nextBtn.addEventListener('click', () => {
 		if (trackIds.length === 0) return
-		playTrack((currentIndex + 1) % trackIds.length)
+		playTrack((currentIndex + 1) % trackIds.length).then(broadcastPlayback)
 	})
 
 	var wasPlayingWhenStartedSeeking = false
@@ -350,12 +466,13 @@ async function init() {
 		if (trackIds.length == 0) return
 		audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
 		if (audio.currentTime >= audio.duration) {
-			playTrack((currentIndex + 1) % trackIds.length)
+			playTrack((currentIndex + 1) % trackIds.length).then(broadcastPlayback)
+		} else {
+			broadcastPlayback()
 		}
 	}
-
-	document.addEventListener('pointerup', onSeekEnd)
-	document.addEventListener('pointercancel', onSeekEnd)
+	progressBar.addEventListener('pointerup', onSeekEnd)
+	progressBar.addEventListener('pointercancel', onSeekEnd)
 
 	const seek = throttleWithTrailing(() => {
 		audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
@@ -410,8 +527,8 @@ async function init() {
 			await db.chunks.add({ file: id, id: i, blob: file.slice(start, end) })
 		}
 
-		const currentFiles = realtime.getState()?.files ?? []
-		realtime.setState({ files: [...currentFiles, meta] })
+		const currentState = realtime.getState() ?? { files: [], nowPlaying: null }
+		realtime.setState({ ...currentState, files: [...currentState.files, meta] })
 		refreshPlaylist([meta])
 	}
 
@@ -552,7 +669,8 @@ async function init() {
 		}
 
 		if (changed) {
-			realtime.setState({ files })
+			const state = realtime.getState() ?? { files: [], nowPlaying: null }
+			realtime.setState({ ...state, files })
 			refreshPlaylist(files)
 		}
 	}
@@ -608,7 +726,8 @@ async function init() {
 				) {
 					currentRequest = null
 				}
-				realtime.setState({ files })
+				const state = realtime.getState() ?? { files: [], nowPlaying: null }
+				realtime.setState({ ...state, files })
 				refreshPlaylist(files)
 			}
 		}
@@ -623,6 +742,7 @@ async function init() {
 	const realtime = new RealTime({
 		onPeersChanged: (peers) => {
 			void syncFileList(peers)
+			void trySyncToPeer(peers)
 		},
 		onPayload: (_deviceId, payload) => {
 			void handlePayload(_deviceId, payload)
@@ -632,9 +752,10 @@ async function init() {
 	// ── startup ────────────────────────────────────────────────────────────
 
 	const allFiles = await db.files.toArray()
-	realtime.setState({ files: allFiles })
+	realtime.setState({ files: allFiles, nowPlaying: null })
 	realtime.connect()
 	window.addEventListener('beforeunload', () => realtime.disconnect())
+	updateSyncButton()
 	refreshPlaylist(allFiles)
 	setTimeout(syncChunks, 100)
 }
