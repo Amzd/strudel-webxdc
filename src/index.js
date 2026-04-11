@@ -812,6 +812,35 @@ async function init() {
 
     // ── controls ───────────────────────────────────────────────────────────
 
+    let hasNotifiedAboutJam = false
+
+    /**
+     * Sends the "started a jam" webxdc update when the local user begins
+     * playback while syncing and no peer is currently broadcasting anything.
+     * Only sends once per session.
+     */
+    function maybeSendStartedJam() {
+        if (hasNotifiedAboutJam) return
+        if (!isSyncing) return
+        const anyPeerPlaying = realtime
+            .getPeers()
+            .some((p) => p.state?.nowPlaying != null)
+        if (!anyPeerPlaying) {
+            hasNotifiedAboutJam = true
+            const state = realtime.getState()
+            const onPlaylist =
+                playlistName === 'Music' ? '' : ` on "${playlistName}"`
+            window.webxdc.sendUpdate(
+                {
+                    payload: null,
+                    info: `${window.webxdc.selfName} started a jam${onPlaylist}!`,
+                    summary: getSummary(state),
+                },
+                ''
+            )
+        }
+    }
+
     playBtn.addEventListener('click', () => {
         if (currentIndex === -1 && trackIds.length > 0) {
             playTrack(0)
@@ -826,6 +855,7 @@ async function init() {
         }
         updatePlayButton()
         broadcastPlayback()
+        if (isPlaying) maybeSendStartedJam()
     })
 
     syncBtn.addEventListener('click', () => {
@@ -835,17 +865,7 @@ async function init() {
             trySyncToPeer(realtime.getPeers()).then((syncedToPeer) => {
                 if (!syncedToPeer) {
                     broadcastPlayback()
-                    const state = realtime.getState()
-                    const onPlaylist =
-                        playlistName == 'Music' ? '' : ` on "${playlistName}"`
-                    window.webxdc.sendUpdate(
-                        {
-                            payload: null,
-                            info: `${window.webxdc.selfName} started a jam${onPlaylist}!`,
-                            summary: getSummary(state),
-                        },
-                        ''
-                    )
+                    maybeSendStartedJam()
                 }
             })
         } else {
