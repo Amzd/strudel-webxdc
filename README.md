@@ -5,7 +5,7 @@ A [webxdc](https://webxdc.org/) music playlist application that allows you to sh
 # Getting started
 
 ```sh
-# Install deps
+# Install dependencies
 pnpm install
 # Perform code checks
 pnpm run check
