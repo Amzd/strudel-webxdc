@@ -409,7 +409,7 @@ async function init() {
      *
      * @param {import('./lib/validate-payload').FileMeta} file
      */
-    function addTrackToPlaylist(file) {
+    function addTrackToPlaylist(file, insertIndex) {
         emptyMsg.hidden = true
         const row = document.createElement('div')
         row.className = 'playlist-row'
@@ -525,8 +525,13 @@ async function init() {
             })
         })
 
-        playlist.appendChild(row)
-        trackIds.push(file.id)
+        if (insertIndex >= trackIds.length) {
+            playlist.appendChild(row)
+            trackIds.push(file.id)
+        } else {
+            playlist.insertBefore(row, playlist.children[insertIndex])
+            trackIds.splice(insertIndex, 0, file.id)
+        }
         trackElements.set(file.id, item)
     }
 
@@ -537,14 +542,19 @@ async function init() {
      * @param {import('./lib/validate-payload').FileMeta[]} files
      */
     function refreshPlaylist(files) {
-        for (const file of files) {
+        const sorted = [...files].sort(
+            (a, b) => a.lastModified - b.lastModified
+        )
+        let pos = 0
+        for (const file of sorted) {
             if (file.size <= 0) continue
             const el = trackElements.get(file.id)
             if (!el) {
-                addTrackToPlaylist(file)
+                addTrackToPlaylist(file, pos)
             } else {
                 updateTrackElement(el, file)
             }
+            pos++
         }
     }
 
@@ -1399,6 +1409,7 @@ async function init() {
     // ── startup ────────────────────────────────────────────────────────────
 
     const allFiles = await db.files.toArray()
+    allFiles.sort((a, b) => a.lastModified - b.lastModified)
     realtime.setState({
         files: allFiles,
         nowPlaying: null,
