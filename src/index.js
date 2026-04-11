@@ -452,7 +452,7 @@ async function init() {
         menuBtn.className = 'playlist-menu-btn'
         menuBtn.type = 'button'
         menuBtn.setAttribute('aria-label', 'More options')
-        menuBtn.textContent = '\u22EE'
+        menuBtn.textContent = '︙'
 
         const menu = document.createElement('div')
         menu.className = 'playlist-menu'
