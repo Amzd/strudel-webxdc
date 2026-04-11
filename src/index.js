@@ -1009,10 +1009,10 @@ async function init() {
         if (!isSeeking) return
         isSeeking = false
         if (trackIds.length == 0) return
+        const value = Number(progressBar.value)
         setTimeout(() => {
             // make sure seek finished
-            audio.currentTime =
-                (Number(progressBar.value) / 100) * audio.duration
+            audio.currentTime = (value / 100) * audio.duration
             if (audio.currentTime >= audio.duration) {
                 playTrack((currentIndex + 1) % trackIds.length).then(
                     broadcastPlayback
