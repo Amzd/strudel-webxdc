@@ -1087,7 +1087,7 @@ async function init() {
      * @param {File} file
      */
     async function sendFile(file) {
-        const lastModified = file.lastModified || Date.now()
+        const lastModified = Date.now()
         const currentState = realtime.getState() ?? {
             files: [],
             nowPlaying: null,
