@@ -791,16 +791,8 @@ async function init() {
             // Only register previoustrack/nexttrack — never register seekbackward,
             // seekforward, or seekto so that iOS shows next/prev track buttons
             // instead of the default skip-10-seconds controls.
-            navigator.mediaSession.setActionHandler('previoustrack', () => {
-                if (trackIds.length === 0) return
-                playTrack(
-                    currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
-                )
-            })
-            navigator.mediaSession.setActionHandler('nexttrack', () => {
-                if (trackIds.length === 0) return
-                playTrack((currentIndex + 1) % trackIds.length)
-            })
+            navigator.mediaSession.setActionHandler('previoustrack', playPrev)
+            navigator.mediaSession.setActionHandler('nexttrack', playNext)
         }
     })
 
@@ -816,6 +808,18 @@ async function init() {
      */
     function getSongCount(state) {
         return state?.files?.filter((f) => f.size > 0).length ?? 0
+    }
+
+    function playPrev() {
+        if (trackIds.length === 0) return
+        playTrack(
+            currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
+        ).then(broadcastPlayback)
+    }
+
+    function playNext() {
+        if (trackIds.length === 0) return
+        playTrack((currentIndex + 1) % trackIds.length).then(broadcastPlayback)
     }
 
     /**
@@ -987,17 +991,9 @@ async function init() {
         if (/** @type {KeyboardEvent} */ (e).key === 'Escape') closePeersModal()
     })
 
-    prevBtn.addEventListener('click', () => {
-        if (trackIds.length === 0) return
-        playTrack(
-            currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
-        ).then(broadcastPlayback)
-    })
+    prevBtn.addEventListener('click', playPrev)
 
-    nextBtn.addEventListener('click', () => {
-        if (trackIds.length === 0) return
-        playTrack((currentIndex + 1) % trackIds.length).then(broadcastPlayback)
-    })
+    nextBtn.addEventListener('click', playNext)
 
     var wasPlayingWhenStartedSeeking = false
     progressBar.addEventListener('pointerdown', () => {
