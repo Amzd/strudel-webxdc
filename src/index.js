@@ -1256,7 +1256,24 @@ async function init() {
         ) {
             let request = null
             const files = realtime.getState()?.files ?? []
-            outer: for (const file of files) {
+            // Build a prioritized file order: current track first, next track
+            // second, then the rest in their original order.
+            const currentId = currendId ?? undefined
+            const currentTrackIndex = trackIds.indexOf(currendId)
+            const nextId =
+                currentTrackIndex >= 0 && trackIds.length > 0
+                    ? trackIds[(currentTrackIndex + 1) % trackIds.length]
+                    : undefined
+            const bucketCurrent = []
+            const bucketNext = []
+            const bucketRest = []
+            for (const f of files) {
+                if (f.id === currentId) bucketCurrent.push(f)
+                else if (f.id === nextId) bucketNext.push(f)
+                else bucketRest.push(f)
+            }
+            const prioritized = [...bucketCurrent, ...bucketNext, ...bucketRest]
+            outer: for (const file of prioritized) {
                 if (file.pending.length > 0) {
                     for (const chunkId of shuffle(file.pending)) {
                         request = createRequest(file, chunkId)
