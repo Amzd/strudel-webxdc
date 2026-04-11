@@ -73,7 +73,8 @@ async function init() {
 
     /** @type {string[]} File IDs in playlist order. */
     let trackIds = []
-    let currentIndex = -1
+    /** @type {string | null} */
+    let currendId = null
     let isPlaying = false
     let isSeeking = false
     /** @type {string | null} */
@@ -253,8 +254,7 @@ async function init() {
      */
     function broadcastPlayback(actionTimeOverride) {
         const state = realtime.getState() ?? { files: [], nowPlaying: null }
-        const fileId =
-            currentIndex >= 0 ? (trackIds[currentIndex] ?? null) : null
+        const fileId = currendId
         realtime.setState({
             ...state,
             selfName: window.webxdc.selfName,
@@ -578,22 +578,20 @@ async function init() {
         if (index !== -1) {
             trackIds.splice(index, 1)
 
-            if (currentIndex === index) {
+            if (currendId === fileId) {
                 audio.pause()
                 if (currentObjectUrl) {
                     URL.revokeObjectURL(currentObjectUrl)
                     currentObjectUrl = null
                 }
                 isPlaying = false
-                currentIndex = -1
+                currendId = null
                 nowPlaying.textContent = 'Nothing playing'
                 playBtn.disabled = trackIds.length === 0
                 updatePlayButton()
                 if ('mediaSession' in navigator) {
                     navigator.mediaSession.playbackState = 'none'
                 }
-            } else if (currentIndex > index) {
-                currentIndex--
             }
         }
 
@@ -601,7 +599,7 @@ async function init() {
             emptyMsg.hidden = false
         }
 
-        highlightTrack(currentIndex)
+        highlightTrack(trackIds.indexOf(currendId))
     }
 
     /**
@@ -611,8 +609,7 @@ async function init() {
      * @param {string} fileId
      */
     async function deleteTrack(fileId) {
-        const wasCurrentTrack =
-            currentIndex >= 0 && trackIds[currentIndex] === fileId
+        const wasCurrentTrack = currendId === fileId
 
         removeTrackFromUI(fileId)
 
@@ -660,8 +657,8 @@ async function init() {
         const id = trackIds[index]
         if (!id) return
 
-        // Set currentIndex before backing out due to downloading so we can prioritize this track
-        currentIndex = index
+        // Set currendId before backing out due to downloading so we can prioritize this track
+        currendId = id
 
         // Don't attempt playback if the track is still downloading.
         const el = trackElements.get(id)
@@ -744,7 +741,7 @@ async function init() {
     audio.addEventListener('ended', () => {
         if (isSeeking) return
         if (trackIds.length > 0) {
-            playTrack((currentIndex + 1) % trackIds.length).then(() =>
+            playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(() =>
                 broadcastPlayback(-1)
             )
         }
@@ -815,14 +812,13 @@ async function init() {
 
     function playPrev() {
         if (trackIds.length === 0) return
-        playTrack(
-            currentIndex <= 0 ? trackIds.length - 1 : currentIndex - 1
-        ).then(broadcastPlayback)
+        const ci = trackIds.indexOf(currendId)
+        playTrack(ci <= 0 ? trackIds.length - 1 : ci - 1).then(broadcastPlayback)
     }
 
     function playNext() {
         if (trackIds.length === 0) return
-        playTrack((currentIndex + 1) % trackIds.length).then(broadcastPlayback)
+        playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(broadcastPlayback)
     }
 
     /**
@@ -868,7 +864,7 @@ async function init() {
     }
 
     playBtn.addEventListener('click', () => {
-        if (currentIndex === -1 && trackIds.length > 0) {
+        if (currendId === null && trackIds.length > 0) {
             playTrack(0)
             return
         }
@@ -1013,7 +1009,7 @@ async function init() {
             // make sure seek finished
             audio.currentTime = (value / 100) * audio.duration
             if (audio.currentTime >= audio.duration) {
-                playTrack((currentIndex + 1) % trackIds.length).then(
+                playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
                     broadcastPlayback
                 )
             } else {
