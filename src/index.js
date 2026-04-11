@@ -1127,8 +1127,9 @@ async function init() {
         const updatedFiles = existing
             ? currentState.files.map((f) => (f.id === id ? meta : f))
             : [...currentState.files, meta]
+        updatedFiles.sort((a, b) => a.lastModified - b.lastModified)
         realtime.setState({ ...currentState, files: updatedFiles })
-        refreshPlaylist([meta])
+        refreshPlaylist(updatedFiles)
         sendSongCountUpdate()
     }
 
