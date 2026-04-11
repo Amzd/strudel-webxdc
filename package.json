@@ -1,20 +1,20 @@
 {
     "private": true,
-    "name": "music",
+    "name": "music-webxdc",
     "version": "1.0.0",
-    "description": "Music app for Webxdc",
+    "description": "Music app for listening to mp3s together",
     "license": "MIT",
     "keywords": [
         "webxdc"
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/Amzd/music.git"
+        "url": "https://github.com/Amzd/music-webxdc.git"
     },
     "bugs": {
-        "url": "https://github.com/Amzd/music/issues"
+        "url": "https://github.com/Amzd/music-webxdc/issues"
     },
-    "homepage": "https://github.com/Amzd/music",
+    "homepage": "https://github.com/Amzd/music-webxdc",
     "type": "module",
     "packageManager": "pnpm@10.14.0",
     "scripts": {
