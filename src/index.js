@@ -478,7 +478,11 @@ async function init() {
         item.addEventListener('click', () => {
             if (item.classList.contains('downloading')) return
             const index = trackIds.indexOf(fileId)
-            if (index !== -1) playTrack(index).then(broadcastPlayback)
+            if (index !== -1)
+                playTrack(index).then(() => {
+                    broadcastPlayback()
+                    maybeSendStartedJam()
+                })
         })
 
         menuBtn.addEventListener('click', (e) => {
@@ -684,6 +688,8 @@ async function init() {
         isPlaying = true
         nowPlaying.textContent = file?.name ?? id
         playBtn.disabled = false
+        nextBtn.disabled = false
+        prevBtn.disabled = false
         updatePlayButton()
         highlightTrack(index)
 
@@ -855,7 +861,6 @@ async function init() {
         }
         updatePlayButton()
         broadcastPlayback()
-        if (isPlaying) maybeSendStartedJam()
     })
 
     syncBtn.addEventListener('click', () => {
