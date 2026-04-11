@@ -302,8 +302,6 @@ async function init() {
             const np = peer.state?.nowPlaying
             if (!np) continue
             if (np.actionTime <= myActionTime) continue
-            const file = files.find((f) => f.id === np.fileId)
-            if (!file || file.pending.length > 0) continue
             if (trackIds.indexOf(np.fileId) === -1) continue
             if (!bestNp || np.actionTime > bestNp.actionTime) bestNp = np
         }
@@ -646,6 +644,9 @@ async function init() {
         const id = trackIds[index]
         if (!id) return
 
+        // Set currentIndex before backing out due to downloading so we can prioritize this track
+        currentIndex = index
+
         // Don't attempt playback if the track is still downloading.
         const el = trackElements.get(id)
         if (el?.classList.contains('downloading')) return
@@ -682,8 +683,6 @@ async function init() {
                 album: '',
             })
         }
-        // Set currentIndex before play() so the 'play' event sees the correct track.
-        currentIndex = index
         audio.play()
         isPlaying = true
         nowPlaying.textContent = file?.name ?? id
