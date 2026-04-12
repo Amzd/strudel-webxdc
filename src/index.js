@@ -857,7 +857,7 @@ async function init() {
             window.webxdc.sendUpdate(
                 {
                     payload: null,
-                    info: `${window.webxdc.selfName} started a jam${onPlaylist}!`,
+                    info: `${window.webxdc.selfName} started a jam${onPlaylist}`,
                     summary: getSummary(state),
                 },
                 ''
@@ -1079,8 +1079,10 @@ async function init() {
 
     // ── drag-and-drop ──────────────────────────────────────────────────────
 
-    /** @type {number} Counter To handle dragenter/dragleave across child
-  elements. */
+    /**
+     * @type {number} Counter To handle dragenter/dragleave across child
+     *   elements.
+     */
     let dragDepth = 0
 
     document.addEventListener('dragenter', (e) => {
