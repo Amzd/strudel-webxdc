@@ -283,6 +283,48 @@ async function init() {
     }
 
     let lastSync = 0
+
+    /** @type {ReturnType<typeof setTimeout> | null} */
+    let alertTimer = null
+
+    /**
+     * Updates the now-playing display to show a song name. Returns without
+     * updating if an alert is currently being shown.
+     *
+     * @param {string | null} song
+     */
+    function showNowPlayingSong(song) {
+        if (alertTimer !== null) return
+        nowPlaying.classList.remove('alert')
+        nowPlaying.textContent = song ?? 'Nothing playing'
+    }
+
+    /**
+     * Temporarily shows an alert message in the now-playing area for 2 seconds,
+     * then restores the current track name. Cancels any in-progress alert.
+     *
+     * @param {string} text
+     */
+    function showAlert(text) {
+        if (alertTimer !== null) {
+            clearTimeout(alertTimer)
+            alertTimer = null
+        }
+        nowPlaying.classList.add('alert')
+        nowPlaying.textContent = text
+        alertTimer = setTimeout(() => {
+            alertTimer = null
+            if (currentId) {
+                const file = (realtime.getState()?.files ?? []).find(
+                    (f) => f.id === currentId
+                )
+                showNowPlayingSong(file?.name)
+            } else {
+                showNowPlayingSong(null)
+            }
+        }, 2000)
+    }
+
     /**
      * If sync is enabled and a peer is actively playing a fully-downloaded
      * track while we are idle, start playing at the peer's current position.
@@ -333,6 +375,7 @@ async function init() {
 
         state.lastAction = bestAction
         realtime.setState(state)
+        if (bestAction.alert) showAlert(bestAction.alert)
         return true
     }
 
@@ -585,7 +628,7 @@ async function init() {
                 }
                 isPlaying = false
                 currentId = null
-                nowPlaying.textContent = 'Nothing playing'
+                showNowPlayingSong(null)
                 playBtn.disabled = trackIds.length === 0
                 updatePlayButton()
                 if ('mediaSession' in navigator) {
@@ -697,7 +740,7 @@ async function init() {
         }
         audio.play()
         isPlaying = true
-        nowPlaying.textContent = file?.name ?? id
+        showNowPlayingSong(file?.name)
         playBtn.disabled = false
         nextBtn.disabled = false
         prevBtn.disabled = false
@@ -881,7 +924,9 @@ async function init() {
             isPlaying = true
         }
         updatePlayButton()
-        broadcastPlayback(window.webxdc.selfName + ' played')
+        broadcastPlayback(
+            window.webxdc.selfName + (isPlaying ? ' played' : ' paused')
+        )
     })
 
     /** @type {boolean} */
@@ -1017,10 +1062,10 @@ async function init() {
                 playTrack(
                     (trackIds.indexOf(currentId) + 1) % trackIds.length
                 ).then(() =>
-                    broadcastPlayback(window.webxdc.selfName + ' seeked')
+                    broadcastPlayback(window.webxdc.selfName + ' played')
                 )
             } else {
-                broadcastPlayback()
+                broadcastPlayback(window.webxdc.selfName + ' seeked')
             }
         }, 310)
     }
