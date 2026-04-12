@@ -248,11 +248,8 @@ async function init() {
     /**
      * Pushes current playback position into the shared realtime state so peers
      * can see what is playing.
-     *
-     * @param actionTimeOverride Set to -1 if this should not be acted upon by
-     *   peers
      */
-    function broadcastPlayback(actionTimeOverride) {
+    function broadcastPlayback() {
         const state = realtime.getState() ?? { files: [], lastAction: null }
         const fileId = currendId
         realtime.setState({
@@ -263,7 +260,7 @@ async function init() {
                       fileId,
                       isPlaying: isPlaying,
                       currentTime: audio.currentTime,
-                      actionTime: actionTimeOverride ?? Date.now(),
+                      actionTime: Date.now(),
                   }
                 : null,
         })
@@ -302,23 +299,24 @@ async function init() {
 
         // Find the peer with the newest actionTime that is still playing.
         /** @type {import('./lib/validate-payload').LastAction | null} */
-        let bestNp = null
+        let bestAction = null
         for (const peer of peers) {
-            const np = peer.state?.lastAction
-            if (!np) continue
-            if (np.actionTime <= myActionTime) continue
-            if (trackIds.indexOf(np.fileId) === -1) continue
-            if (!bestNp || np.actionTime > bestNp.actionTime) bestNp = np
+            const action = peer.state?.lastAction
+            if (!action) continue
+            if (action.actionTime <= myActionTime) continue
+            if (trackIds.indexOf(action.fileId) === -1) continue
+            if (!bestAction || action.actionTime > bestAction.actionTime)
+                bestAction = action
         }
 
-        if (!bestNp) return
-        if (bestNp.actionTime <= lastSync) return
-        lastSync = bestNp.actionTime
+        if (!bestAction) return
+        if (bestAction.actionTime <= lastSync) return
+        lastSync = bestAction.actionTime
 
-        let index = trackIds.indexOf(bestNp.fileId)
+        let index = trackIds.indexOf(bestAction.fileId)
         await playTrack(index)
-        const elapsed = (Date.now() - bestNp.actionTime) / 1000
-        let seekTo = bestNp.currentTime + elapsed
+        const elapsed = (Date.now() - bestAction.actionTime) / 1000
+        let seekTo = bestAction.currentTime + elapsed
         while (seekTo >= audio.duration) {
             seekTo -= audio.duration
             index += 1
@@ -331,9 +329,9 @@ async function init() {
                 await new Promise((r) => setTimeout(r, 10))
             }
         }
-        if (!bestNp.isPlaying) audio.pause()
+        if (!bestAction.isPlaying) audio.pause()
 
-        broadcastPlayback(-1)
+        realtime.state.lastAction = bestAction
         return true
     }
 
@@ -741,8 +739,8 @@ async function init() {
     audio.addEventListener('ended', () => {
         if (isSeeking) return
         if (trackIds.length > 0) {
-            playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(() =>
-                broadcastPlayback(-1)
+            playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
+                () => broadcastPlayback()
             )
         }
     })
@@ -813,12 +811,16 @@ async function init() {
     function playPrev() {
         if (trackIds.length === 0) return
         const ci = trackIds.indexOf(currendId)
-        playTrack(ci <= 0 ? trackIds.length - 1 : ci - 1).then(broadcastPlayback)
+        playTrack(ci <= 0 ? trackIds.length - 1 : ci - 1).then(
+            broadcastPlayback
+        )
     }
 
     function playNext() {
         if (trackIds.length === 0) return
-        playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(broadcastPlayback)
+        playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
+            broadcastPlayback
+        )
     }
 
     /**
@@ -1009,9 +1011,9 @@ async function init() {
             // make sure seek finished
             audio.currentTime = (value / 100) * audio.duration
             if (audio.currentTime >= audio.duration) {
-                playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
-                    broadcastPlayback
-                )
+                playTrack(
+                    (trackIds.indexOf(currendId) + 1) % trackIds.length
+                ).then(broadcastPlayback)
             } else {
                 broadcastPlayback()
             }
@@ -1077,7 +1079,8 @@ async function init() {
 
     // ── drag-and-drop ──────────────────────────────────────────────────────
 
-    /** @type {number} Counter to handle dragenter/dragleave across child elements. */
+    /** @type {number} Counter To handle dragenter/dragleave across child
+  elements. */
     let dragDepth = 0
 
     document.addEventListener('dragenter', (e) => {
