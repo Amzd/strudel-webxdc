@@ -293,8 +293,7 @@ async function init() {
      * >[]} peers
      */
     async function trySyncToPeer(peers) {
-        const state = realtime.getState()
-        const files = state?.files ?? []
+        const state = realtime.getState() ?? { files: [], lastAction: null }
         const myActionTime = state?.lastAction?.actionTime ?? 0
 
         // Find the peer with the newest actionTime that is still playing.
@@ -331,7 +330,8 @@ async function init() {
         }
         if (!bestAction.isPlaying) audio.pause()
 
-        realtime.state.lastAction = bestAction
+        state.lastAction = bestAction
+        realtime.setState(state)
         return true
     }
 
