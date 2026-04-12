@@ -4,6 +4,8 @@ import { parseBlob } from 'music-metadata'
 import { CHUNK_SIZE, db, getDownloadProgress } from './lib/storage'
 import { isRequest, isResponse } from './lib/validate-payload'
 
+import './lib/util'
+
 init()
 
 async function init() {
@@ -364,13 +366,8 @@ async function init() {
             index += 1
             await playTrack(index)
         }
-        if (isFinite(audio.duration) && seekTo < audio.duration) {
-            audio.currentTime = seekTo
-            while (audio.currentTime < seekTo) {
-                audio.currentTime = seekTo
-                await new Promise((r) => setTimeout(r, 10))
-            }
-        }
+        await audio.safeSeek(seekTo)
+
         if (!bestAction.isPlaying) audio.pause()
 
         state.lastAction = bestAction
@@ -717,7 +714,7 @@ async function init() {
 
         const blob = new Blob(
             chunks.map((c) => c.blob),
-            { type: 'audio/mpeg' }
+            { type: 'audio/mp3' }
         )
 
         const file = (realtime.getState()?.files ?? []).find((f) => f.id === id)
@@ -790,11 +787,10 @@ async function init() {
     })
 
     audio.addEventListener('timeupdate', () => {
-        if (isSeeking) return
         if (!isFinite(audio.duration)) return
         const pct = (audio.currentTime / audio.duration) * 100
-        progressBar.value = String(pct)
         currentTimeEl.textContent = formatTime(audio.currentTime)
+        if (!isSeeking) progressBar.value = String(pct)
     })
 
     audio.addEventListener('loadedmetadata', () => {
@@ -1050,14 +1046,15 @@ async function init() {
         wasPlayingWhenStartedSeeking = !audio.paused
     })
 
+    var lastSafeSeek = undefined
     const onSeekEnd = () => {
         if (!isSeeking) return
         isSeeking = false
         if (trackIds.length == 0) return
         const value = Number(progressBar.value)
-        setTimeout(() => {
+        setTimeout(async function () {
             // make sure seek finished
-            audio.currentTime = (value / 100) * audio.duration
+            if (lastSafeSeek) await lastSafeSeek
             if (audio.currentTime >= audio.duration) {
                 playTrack(
                     (trackIds.indexOf(currentId) + 1) % trackIds.length
@@ -1072,19 +1069,19 @@ async function init() {
     progressBar.addEventListener('pointerup', onSeekEnd)
     progressBar.addEventListener('pointercancel', onSeekEnd)
 
-    const seek = throttleWithTrailing(() => {
-        audio.currentTime = (Number(progressBar.value) / 100) * audio.duration
+    const seek = throttleWithTrailing((progressBarValue) => {
+        lastSafeSeek = audio.safeSeek((progressBarValue / 100) * audio.duration)
         if (
             wasPlayingWhenStartedSeeking &&
             audio.paused &&
-            progressBar.value < 100
+            progressBarValue < 100
         )
             audio.play()
     }, 300)
     progressBar.addEventListener('input', () => {
         if (!isSeeking) return
         if (!isFinite(audio.duration)) return
-        seek()
+        seek(Number(progressBar.value))
     })
 
     // ── upload ─────────────────────────────────────────────────────────────
