@@ -73,8 +73,8 @@ async function init() {
 
     /** @type {string[]} File IDs in playlist order. */
     let trackIds = []
-    /** @type {string | null} */
-    let currendId = null
+    /** @type {string} */
+    let currentId = ''
     let isPlaying = false
     let isSeeking = false
     /** @type {string | null} */
@@ -249,9 +249,9 @@ async function init() {
      * Pushes current playback position into the shared realtime state so peers
      * can see what is playing.
      */
-    function broadcastPlayback() {
+    function broadcastPlayback(alert) {
         const state = realtime.getState() ?? { files: [], lastAction: null }
-        const fileId = currendId
+        const fileId = currentId
         realtime.setState({
             ...state,
             selfName: window.webxdc.selfName,
@@ -261,6 +261,7 @@ async function init() {
                       isPlaying: isPlaying,
                       currentTime: audio.currentTime,
                       actionTime: Date.now(),
+                      alert,
                   }
                 : null,
         })
@@ -482,7 +483,7 @@ async function init() {
             const index = trackIds.indexOf(fileId)
             if (index !== -1)
                 playTrack(index).then(() => {
-                    broadcastPlayback()
+                    broadcastPlayback(window.webxdc.selfName + ' played')
                     maybeSendStartedJam()
                 })
         })
@@ -576,14 +577,14 @@ async function init() {
         if (index !== -1) {
             trackIds.splice(index, 1)
 
-            if (currendId === fileId) {
+            if (currentId === fileId) {
                 audio.pause()
                 if (currentObjectUrl) {
                     URL.revokeObjectURL(currentObjectUrl)
                     currentObjectUrl = null
                 }
                 isPlaying = false
-                currendId = null
+                currentId = null
                 nowPlaying.textContent = 'Nothing playing'
                 playBtn.disabled = trackIds.length === 0
                 updatePlayButton()
@@ -597,7 +598,7 @@ async function init() {
             emptyMsg.hidden = false
         }
 
-        highlightTrack(trackIds.indexOf(currendId))
+        highlightTrack(trackIds.indexOf(currentId))
     }
 
     /**
@@ -607,7 +608,7 @@ async function init() {
      * @param {string} fileId
      */
     async function deleteTrack(fileId) {
-        const wasCurrentTrack = currendId === fileId
+        const wasCurrentTrack = currentId === fileId
 
         removeTrackFromUI(fileId)
 
@@ -655,8 +656,8 @@ async function init() {
         const id = trackIds[index]
         if (!id) return
 
-        // Set currendId before backing out due to downloading so we can prioritize this track
-        currendId = id
+        // Set currentId before backing out due to downloading so we can prioritize this track
+        currentId = id
 
         // Don't attempt playback if the track is still downloading.
         const el = trackElements.get(id)
@@ -739,7 +740,7 @@ async function init() {
     audio.addEventListener('ended', () => {
         if (isSeeking) return
         if (trackIds.length > 0) {
-            playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
+            playTrack((trackIds.indexOf(currentId) + 1) % trackIds.length).then(
                 () => broadcastPlayback()
             )
         }
@@ -810,16 +811,18 @@ async function init() {
 
     function playPrev() {
         if (trackIds.length === 0) return
-        const ci = trackIds.indexOf(currendId)
-        playTrack(ci <= 0 ? trackIds.length - 1 : ci - 1).then(
-            broadcastPlayback
-        )
+        const ci = trackIds.indexOf(currentId)
+        playTrack(ci <= 0 ? trackIds.length - 1 : ci - 1).then(() => {
+            broadcastPlayback(window.webxdc.selfName + ' rewinded')
+        })
     }
 
     function playNext() {
         if (trackIds.length === 0) return
-        playTrack((trackIds.indexOf(currendId) + 1) % trackIds.length).then(
-            broadcastPlayback
+        playTrack((trackIds.indexOf(currentId) + 1) % trackIds.length).then(
+            () => {
+                broadcastPlayback(window.webxdc.selfName + ' skipped')
+            }
         )
     }
 
@@ -866,7 +869,7 @@ async function init() {
     }
 
     playBtn.addEventListener('click', () => {
-        if (currendId === null && trackIds.length > 0) {
+        if (currentId === null && trackIds.length > 0) {
             playTrack(0)
             return
         }
@@ -878,7 +881,7 @@ async function init() {
             isPlaying = true
         }
         updatePlayButton()
-        broadcastPlayback()
+        broadcastPlayback(window.webxdc.selfName + ' played')
     })
 
     /** @type {boolean} */
@@ -1012,8 +1015,10 @@ async function init() {
             audio.currentTime = (value / 100) * audio.duration
             if (audio.currentTime >= audio.duration) {
                 playTrack(
-                    (trackIds.indexOf(currendId) + 1) % trackIds.length
-                ).then(broadcastPlayback)
+                    (trackIds.indexOf(currentId) + 1) % trackIds.length
+                ).then(() =>
+                    broadcastPlayback(window.webxdc.selfName + ' seeked')
+                )
             } else {
                 broadcastPlayback()
             }
@@ -1263,8 +1268,7 @@ async function init() {
             const files = realtime.getState()?.files ?? []
             // Build a prioritized file order: current track first, next track
             // second, then the rest in their original order.
-            const currentId = currendId ?? undefined
-            const currentTrackIndex = trackIds.indexOf(currendId)
+            const currentTrackIndex = trackIds.indexOf(currentId)
             const nextId =
                 currentTrackIndex >= 0 && trackIds.length > 0
                     ? trackIds[(currentTrackIndex + 1) % trackIds.length]

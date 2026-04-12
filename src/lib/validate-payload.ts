@@ -23,6 +23,7 @@ export type LastAction = {
     currentTime: number
     /** Wall-clock timestamp (ms) when this state was last updated. */
     actionTime: number
+    alert?: string
 }
 
 export type AppState = {
