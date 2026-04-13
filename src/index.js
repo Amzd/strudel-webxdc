@@ -355,12 +355,23 @@ async function init() {
 
         if (!bestAction) return
         if (bestAction.actionTime <= lastSync) return
+        if (!isTrackDoneDownloading(bestAction.fileId)) return
         lastSync = bestAction.actionTime
 
-        let index = trackIds.indexOf(bestAction.fileId)
+        await syncToAction(bestAction)
+
+        state.lastAction = bestAction
+        realtime.setState(state)
+        if (bestAction.alert) showAlert(bestAction.alert)
+        return true
+    }
+    async function syncToAction(action) {
+        let index = trackIds.indexOf(action.fileId)
         await playTrack(index)
-        const elapsed = (Date.now() - bestAction.actionTime) / 1000
-        let seekTo = bestAction.currentTime + elapsed
+        const elapsed = action.isPlaying
+            ? (Date.now() - action.actionTime) / 1000
+            : 0
+        let seekTo = action.currentTime + elapsed
         while (seekTo >= audio.duration) {
             seekTo -= audio.duration
             index += 1
@@ -368,12 +379,7 @@ async function init() {
         }
         await audio.safeSeek(seekTo)
 
-        if (!bestAction.isPlaying) audio.pause()
-
-        state.lastAction = bestAction
-        realtime.setState(state)
-        if (bestAction.alert) showAlert(bestAction.alert)
-        return true
+        if (!action.isPlaying) audio.pause()
     }
 
     const ICON_PLAY =
@@ -689,19 +695,23 @@ async function init() {
         })
     }
 
+    function isTrackDoneDownloading(id) {
+        const el = trackElements.get(id)
+        return !(el?.classList.contains('downloading') ?? true)
+    }
+
     /** @param {number} index */
     async function playTrack(index) {
         if (index < 0 || index >= trackIds.length) return
 
         const id = trackIds[index]
-        if (!id) return
+        if (!id) return console.warn('could not find id')
 
         // Set currentId before backing out due to downloading so we can prioritize this track
         currentId = id
 
         // Don't attempt playback if the track is still downloading.
-        const el = trackElements.get(id)
-        if (el?.classList.contains('downloading')) return
+        if (!isTrackDoneDownloading(id)) return
 
         /** @type {import('./lib/validate-payload').Chunk[]} */
         const chunks = await db.chunks.where('file').equals(id).sortBy('id')
@@ -1231,24 +1241,23 @@ async function init() {
     /** Debounce window for batching state flushes after chunk receipt (ms). */
     const STATE_FLUSH_DEBOUNCE_MS = 1000
 
-    /** @type {ReturnType<typeof setTimeout> | null} */
-    let flushTimer = null
-
     /**
      * Schedules a debounced broadcast of the current state and a playlist
      * refresh. Batches rapid consecutive chunk receipts into a single update.
      */
-    function scheduleStateFlush() {
-        if (flushTimer !== null) clearTimeout(flushTimer)
-        flushTimer = setTimeout(() => {
-            flushTimer = null
-            const state = realtime.getState() ?? { files: [], lastAction: null }
-            const files = state.files ?? []
-            realtime.setState({ ...state, files })
-            refreshPlaylist(files)
-            if (lastSync == 0) trySyncToPeer(realtime.getPeers())
-        }, STATE_FLUSH_DEBOUNCE_MS)
-    }
+    const scheduleStateFlush = throttleWithTrailing(() => {
+        const state = realtime.getState() ?? { files: [], lastAction: null }
+        const files = state.files ?? []
+        realtime.setState({ ...state, files })
+        refreshPlaylist(files)
+        trySyncToPeer(realtime.getPeers()).then((didSync) => {
+            console.log('tried to sync', didSync, realtime.getState())
+            if (didSync) return
+            const state = realtime.getState()
+            if (!state?.lastAction) return
+            syncToAction(state.lastAction)
+        })
+    }, STATE_FLUSH_DEBOUNCE_MS)
 
     /**
      * Fisher-Yates shuffle - returns a new array.
