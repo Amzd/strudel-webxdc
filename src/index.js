@@ -1064,7 +1064,14 @@ async function init() {
         const value = Number(progressBar.value)
         setTimeout(async function () {
             // make sure seek finished
-            if (lastSafeSeek) await lastSafeSeek
+            if (lastSafeSeek) {
+                await lastSafeSeek
+                lastSafeSeek = undefined
+            } else {
+                // input wasn't fired because user only clicked and didn't drag
+                await audio.safeSeek((value / 100) * audio.duration)
+            }
+
             if (audio.currentTime >= audio.duration) {
                 playTrack(
                     (trackIds.indexOf(currentId) + 1) % trackIds.length
