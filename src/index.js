@@ -1,6 +1,7 @@
 import { StrudelMirror, codemirrorSettings } from '@strudel/codemirror'
 import { silence } from '@strudel/core'
 import { getDrawContext } from '@strudel/draw'
+import { prebake } from '@strudel/repl'
 import { transpiler } from '@strudel/transpiler'
 import {
     getAudioContext,
@@ -8,7 +9,18 @@ import {
     webaudioOutput,
 } from '@strudel/webaudio'
 
-import { prebake } from './prebake.js'
+// Redirect soundfont data requests to locally bundled files (public/sounds/).
+// The @strudel/repl pre-built chunk has its own copy of fontloader.mjs with a
+// separate soundfontUrl variable, so patching globalThis.fetch is the only
+// reliable way to redirect those fetches regardless of module instance.
+const nativeFetch = globalThis.fetch.bind(globalThis)
+const SOUNDFONT_BASE = 'https://felixroos.github.io/webaudiofontdata/sound/'
+globalThis.fetch = function (url, init) {
+    if (typeof url === 'string' && url.startsWith(SOUNDFONT_BASE)) {
+        url = '/sounds/' + url.slice(SOUNDFONT_BASE.length)
+    }
+    return nativeFetch(url, init)
+}
 
 const DEFAULT_CODE = `setcps(1)
 n("<0 1 2 3 4>*8").scale('G4 minor')

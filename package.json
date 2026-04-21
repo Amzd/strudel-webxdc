@@ -18,7 +18,7 @@
     "type": "module",
     "packageManager": "pnpm@10.14.0",
     "scripts": {
-        "build": "node scripts/fetch-sounds.js && vite build",
+        "build": "vite build",
         "check:eslint": "eslint --cache .",
         "check:format": "prettier --check --cache .",
         "check:types": "tsc",
