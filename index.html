@@ -8,6 +8,56 @@
         />
         <script src="webxdc.js"></script>
         <title>Strudel</title>
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                background: #000;
+                color: #fff;
+                font-family: monospace;
+                display: flex;
+                flex-direction: column;
+            }
+            #strudel-toolbar {
+                display: flex;
+                gap: 8px;
+                padding: 6px 8px;
+                background: #111;
+                border-bottom: 1px solid #333;
+                flex-shrink: 0;
+            }
+            #strudel-toolbar button {
+                cursor: pointer;
+                background: #222;
+                color: #fff;
+                border: 1px solid #555;
+                border-radius: 4px;
+                padding: 4px 12px;
+                font-family: monospace;
+                font-size: 14px;
+            }
+            #strudel-toolbar button:hover:not(:disabled) {
+                background: #444;
+            }
+            #strudel-toolbar button:disabled {
+                opacity: 0.4;
+                cursor: default;
+            }
+            /* The strudel-editor web component inserts a sibling div that
+               contains the actual CodeMirror editor. Make both fill the
+               remaining height. */
+            strudel-editor,
+            strudel-editor + div {
+                flex: 1;
+                min-height: 0;
+                overflow: auto;
+            }
+            strudel-editor + div .cm-editor {
+                height: 100%;
+            }
+        </style>
     </head>
     <body>
         <strudel-editor>
