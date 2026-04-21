@@ -6,7 +6,12 @@ window.webxdc.setUpdateListener((_update) => {})
 // wiring up our own toolbar buttons.
 customElements.whenDefined('strudel-editor').then(() => {
     const strudelEl = document.querySelector('strudel-editor')
-    if (!strudelEl || !strudelEl.parentElement) return
+    if (!strudelEl || !strudelEl.parentElement) {
+        console.warn(
+            'strudel-editor element not found or not attached to the DOM'
+        )
+        return
+    }
 
     // Build a simple toolbar with play / stop buttons.
     const toolbar = document.createElement('div')
@@ -35,14 +40,10 @@ customElements.whenDefined('strudel-editor').then(() => {
         )
     })
 
-    // Use a short delay so the editor object is fully initialised before we
-    // attach click handlers.
-    setTimeout(() => {
-        const el =
-            /** @type {{ editor?: { evaluate(): void; stop(): void } }} */ (
-                /** @type {unknown} */ (strudelEl)
-            )
-        btnPlay.addEventListener('click', () => el.editor?.evaluate())
-        btnStop.addEventListener('click', () => el.editor?.stop())
-    }, 0)
+    // connectedCallback sets editor synchronously, so it is available here.
+    const el = /** @type {{ editor?: { evaluate(): void; stop(): void } }} */ (
+        /** @type {unknown} */ (strudelEl)
+    )
+    btnPlay.addEventListener('click', () => el.editor?.evaluate())
+    btnStop.addEventListener('click', () => el.editor?.stop())
 })
