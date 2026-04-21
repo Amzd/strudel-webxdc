@@ -1,8 +1,8 @@
 {
     "private": true,
-    "name": "music-webxdc",
+    "name": "strudel-webxdc",
     "version": "1.0.0",
-    "description": "Music app for listening to mp3s together",
+    "description": "Plain webxdc template",
     "license": "MIT",
     "keywords": [
         "webxdc"
@@ -56,10 +56,5 @@
         "overrides": {
             "@vitejs/plugin-basic-ssl": "2.0.0"
         }
-    },
-    "dependencies": {
-        "@webxdc/realtime": "^0.2.2",
-        "dexie": "^4.4.2",
-        "music-metadata": "^11.12.3"
     }
 }
