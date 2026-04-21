@@ -1,13 +1,14 @@
 import { StrudelMirror, codemirrorSettings } from '@strudel/codemirror'
 import { silence } from '@strudel/core'
 import { getDrawContext } from '@strudel/draw'
-import { prebake } from '@strudel/repl'
 import { transpiler } from '@strudel/transpiler'
 import {
     getAudioContext,
     initAudioOnFirstClick,
     webaudioOutput,
 } from '@strudel/webaudio'
+
+import { prebake } from './prebake.js'
 
 const DEFAULT_CODE = `setcps(1)
 n("<0 1 2 3 4>*8").scale('G4 minor')
