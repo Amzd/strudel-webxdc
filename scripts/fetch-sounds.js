@@ -29,15 +29,13 @@ if (!existsSync(SOUNDS_DIR)) {
 
 // ---------- resolve the font list from @strudel/soundfonts ----------------
 
-// Dynamic import so this works as an ES module
-const { default: gm } = await import(
-    '../node_modules/.pnpm/@strudel+soundfonts@1.3.0/node_modules/@strudel/soundfonts/gm.mjs'
-)
+const { default: gm } = await import('@strudel/soundfonts/gm.mjs')
 
 /**
  * Build the list of font file names to download.
  *
- * - One variant (the first listed) per GM sound — covers all 125 instruments.
+ * - One variant (the first listed) per GM sound — covers the GM instrument set
+ *   registered by @strudel/soundfonts (a subset of the 128 GM patches).
  * - ALL variants for gm_lead_6_voice because the default demo pattern cycles
  *   through n=0..4 which maps to font indices 0..4 of that sound.
  */
