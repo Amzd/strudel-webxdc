@@ -1,4 +1,192 @@
-import '@strudel/embed'
+import { StrudelMirror, codemirrorSettings } from '@strudel/codemirror'
+import { silence } from '@strudel/core'
+import { getDrawContext } from '@strudel/draw'
+import { prebake } from '@strudel/repl'
+import { transpiler } from '@strudel/transpiler'
+import {
+    getAudioContext,
+    initAudioOnFirstClick,
+    webaudioOutput,
+} from '@strudel/webaudio'
 
-window.webxdc.setUpdateListener((_update) => {})
+const DEFAULT_CODE = `setcps(1)
+n("<0 1 2 3 4>*8").scale('G4 minor')
+.s("gm_lead_6_voice")
+.clip(sine.range(.2,.8).slow(8))
+.jux(rev)
+.room(2)
+.sometimes(add(note("12")))
+.lpf(perlin.range(200,20000).slow(4))`
 
+initAudioOnFirstClick()
+
+const drawContext = getDrawContext()
+const drawTime = [-2, 2]
+
+const mirror = new StrudelMirror({
+    defaultOutput: webaudioOutput,
+    getTime: () => getAudioContext().currentTime,
+    transpiler,
+    root: document.getElementById('editor-root'),
+    initialCode: DEFAULT_CODE,
+    pattern: silence,
+    drawTime,
+    drawContext,
+    prebake,
+    solo: true,
+    sync: false,
+    onUpdateState: ({ started, error }) => {
+        updateToolbarState(started, error)
+    },
+})
+
+// Restore saved settings
+const savedSettings = codemirrorSettings.get()
+mirror.updateSettings(savedSettings)
+syncSettingsPanel(savedSettings)
+
+// ── Toolbar wiring ───────────────────────────────────────────────────────────
+
+const playBtn = document.getElementById('play-btn')
+const stopBtn = document.getElementById('stop-btn')
+const settingsBtn = document.getElementById('settings-btn')
+const shareBtn = document.getElementById('share-btn')
+const settingsPanel = document.getElementById('settings-panel')
+const statusText = document.getElementById('status-text')
+const sharedNotice = document.getElementById('shared-notice')
+
+playBtn.addEventListener('click', () => mirror.toggle())
+stopBtn.addEventListener('click', () => mirror.stop())
+
+settingsBtn.addEventListener('click', () => {
+    settingsPanel.classList.toggle('open')
+})
+
+// Close settings panel when clicking outside
+document.addEventListener('click', (e) => {
+    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+        settingsPanel.classList.remove('open')
+    }
+})
+
+function updateToolbarState(started, error) {
+    const playIcon = document.getElementById('play-icon')
+    const pauseIcon = document.getElementById('pause-icon')
+
+    if (started) {
+        playBtn.classList.add('playing')
+        playIcon.style.display = 'none'
+        pauseIcon.style.display = ''
+    } else {
+        playBtn.classList.remove('playing')
+        playIcon.style.display = ''
+        pauseIcon.style.display = 'none'
+    }
+
+    if (error) {
+        statusText.textContent = String(error).replace(/^Error:\s*/i, '')
+        statusText.classList.add('error')
+    } else {
+        statusText.textContent = ''
+        statusText.classList.remove('error')
+    }
+}
+
+// ── Settings panel wiring ────────────────────────────────────────────────────
+
+function syncSettingsPanel(settings) {
+    document.getElementById('font-size-input').value = settings.fontSize ?? 18
+    document.getElementById('font-size-label').textContent =
+        settings.fontSize ?? 18
+    document.getElementById('font-family-input').value =
+        settings.fontFamily ?? 'monospace'
+    document.getElementById('line-numbers-input').checked =
+        settings.isLineNumbersDisplayed !== false
+    document.getElementById('line-wrap-input').checked =
+        settings.isLineWrappingEnabled === true
+    document.getElementById('autocomplete-input').checked =
+        settings.isAutoCompletionEnabled === true
+    document.getElementById('bracket-matching-input').checked =
+        settings.isBracketMatchingEnabled === true
+    document.getElementById('flash-input').checked =
+        settings.isFlashEnabled !== false
+    document.getElementById('pattern-highlight-input').checked =
+        settings.isPatternHighlightingEnabled !== false
+}
+
+function applySetting(key, value) {
+    mirror.changeSetting(key, value)
+    const updated = { ...codemirrorSettings.get(), [key]: value }
+    codemirrorSettings.set(updated)
+}
+
+document.getElementById('font-size-input').addEventListener('input', (e) => {
+    const size = Number(e.target.value)
+    document.getElementById('font-size-label').textContent = size
+    applySetting('fontSize', size)
+})
+
+document.getElementById('font-family-input').addEventListener('change', (e) => {
+    applySetting('fontFamily', e.target.value)
+})
+
+document
+    .getElementById('line-numbers-input')
+    .addEventListener('change', (e) => {
+        applySetting('isLineNumbersDisplayed', e.target.checked)
+    })
+
+document.getElementById('line-wrap-input').addEventListener('change', (e) => {
+    applySetting('isLineWrappingEnabled', e.target.checked)
+})
+
+document
+    .getElementById('autocomplete-input')
+    .addEventListener('change', (e) => {
+        applySetting('isAutoCompletionEnabled', e.target.checked)
+    })
+
+document
+    .getElementById('bracket-matching-input')
+    .addEventListener('change', (e) => {
+        applySetting('isBracketMatchingEnabled', e.target.checked)
+    })
+
+document.getElementById('flash-input').addEventListener('change', (e) => {
+    applySetting('isFlashEnabled', e.target.checked)
+})
+
+document
+    .getElementById('pattern-highlight-input')
+    .addEventListener('change', (e) => {
+        applySetting('isPatternHighlightingEnabled', e.target.checked)
+    })
+
+// ── WebXDC integration ───────────────────────────────────────────────────────
+
+shareBtn.addEventListener('click', () => {
+    window.webxdc.sendUpdate(
+        {
+            payload: { code: mirror.code },
+        },
+        'Shared pattern'
+    )
+})
+
+let noticeTimeout
+function showSharedNotice() {
+    sharedNotice.classList.add('show')
+    clearTimeout(noticeTimeout)
+    noticeTimeout = setTimeout(
+        () => sharedNotice.classList.remove('show'),
+        3000
+    )
+}
+
+window.webxdc.setUpdateListener((update) => {
+    const code = update.payload?.code
+    if (typeof code === 'string' && code !== mirror.code) {
+        mirror.setCode(code)
+        showSharedNotice()
+    }
+})
