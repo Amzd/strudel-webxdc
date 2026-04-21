@@ -58,6 +58,6 @@
         }
     },
     "dependencies": {
-        "@strudel/repl": "^1.3.0"
+        "@strudel/embed": "^1.1.2"
     }
 }
