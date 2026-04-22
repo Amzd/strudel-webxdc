@@ -34,28 +34,6 @@ n("<0 1 2 3 4>*8").scale('G4 minor')
 
 initAudioOnFirstClick()
 
-// Pre-create the draw canvas before getDrawContext() is called so the library
-// reuses it (skipping its own creation and resize handler).  This lets us
-// position the canvas below the toolbar from the start.
-const TOOLBAR_HEIGHT = 44
-const drawCanvas = document.createElement('canvas')
-drawCanvas.id = 'test-canvas'
-const initialDpr = window.devicePixelRatio
-drawCanvas.width = window.innerWidth * initialDpr
-drawCanvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * initialDpr
-drawCanvas.style.cssText = `pointer-events:none;width:100%;height:calc(100% - ${TOOLBAR_HEIGHT}px);position:fixed;top:${TOOLBAR_HEIGHT}px;left:0`
-document.body.prepend(drawCanvas)
-
-let drawCanvasResizeTimeout
-window.addEventListener('resize', () => {
-    clearTimeout(drawCanvasResizeTimeout)
-    drawCanvasResizeTimeout = setTimeout(() => {
-        const dpr = window.devicePixelRatio
-        drawCanvas.width = window.innerWidth * dpr
-        drawCanvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * dpr
-    }, 200)
-})
-
 const drawContext = getDrawContext()
 const drawTime = [-2, 2]
 

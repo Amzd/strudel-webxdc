@@ -33,10 +33,15 @@
                 padding: 0;
                 width: 100%;
                 height: 100%;
-                background: var(--background);
+                background: transparent;
                 color: var(--foreground);
                 font-family: monospace;
                 overflow: hidden;
+            }
+
+            /* Dark fallback shown before the draw canvas renders */
+            html {
+                background: var(--background);
             }
 
             #editor-root {
@@ -48,7 +53,7 @@
 
             #editor-root .cm-editor {
                 height: 100%;
-                background: transparent;
+                background: transparent !important;
             }
 
             #editor-root .cm-scroller {
