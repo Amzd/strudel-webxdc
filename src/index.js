@@ -127,6 +127,8 @@ function syncSettingsPanel(settings) {
         settings.isFlashEnabled !== false
     document.getElementById('pattern-highlight-input').checked =
         settings.isPatternHighlightingEnabled !== false
+    document.getElementById('tooltip-input').checked =
+        settings.isTooltipEnabled === true
 }
 
 function applySetting(key, value) {
@@ -176,6 +178,10 @@ document
     .addEventListener('change', (e) => {
         applySetting('isPatternHighlightingEnabled', e.target.checked)
     })
+
+document.getElementById('tooltip-input').addEventListener('change', (e) => {
+    applySetting('isTooltipEnabled', e.target.checked)
+})
 
 // ── WebXDC integration ───────────────────────────────────────────────────────
 
