@@ -120,7 +120,7 @@ function syncSettingsPanel(settings) {
     document.getElementById('line-wrap-input').checked =
         settings.isLineWrappingEnabled === true
     document.getElementById('autocomplete-input').checked =
-        settings.isAutoCompletionEnabled === true
+        settings.isAutoCompletionEnabled !== false
     document.getElementById('bracket-matching-input').checked =
         settings.isBracketMatchingEnabled === true
     document.getElementById('flash-input').checked =
