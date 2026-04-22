@@ -37,6 +37,41 @@ initAudioOnFirstClick()
 const drawContext = getDrawContext()
 const drawTime = [-2, 2]
 
+// The draw canvas is created lazily by strudel at top:0 covering the full viewport.
+// Reposition it to start below the toolbar so the piano roll appears in the editor area.
+const TOOLBAR_HEIGHT = 44
+
+function adjustDrawCanvas(canvas) {
+    const dpr = window.devicePixelRatio
+    canvas.style.top = `${TOOLBAR_HEIGHT}px`
+    canvas.style.height = `calc(100% - ${TOOLBAR_HEIGHT}px)`
+    canvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * dpr
+}
+
+const drawCanvasObserver = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+            if (
+                node.nodeType === Node.ELEMENT_NODE &&
+                node.id === 'test-canvas'
+            ) {
+                adjustDrawCanvas(node)
+                drawCanvasObserver.disconnect()
+                // Re-adjust after the library's own resize handler (debounced 200 ms)
+                let resizeTimeout
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimeout)
+                    resizeTimeout = setTimeout(
+                        () => adjustDrawCanvas(node),
+                        250
+                    )
+                })
+            }
+        }
+    }
+})
+drawCanvasObserver.observe(document.body, { childList: true })
+
 const mirror = new StrudelMirror({
     defaultOutput: webaudioOutput,
     getTime: () => getAudioContext().currentTime,
