@@ -54,9 +54,9 @@ const mirror = new StrudelMirror({
     },
 })
 
-// Restore saved settings
+// Restore saved settings (apply defaults for settings that are on-by-default)
 const savedSettings = codemirrorSettings.get()
-mirror.updateSettings(savedSettings)
+mirror.updateSettings({ isAutoCompletionEnabled: true, ...savedSettings })
 syncSettingsPanel(savedSettings)
 
 // ── Toolbar wiring ───────────────────────────────────────────────────────────
