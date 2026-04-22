@@ -42,7 +42,7 @@
             #editor-root {
                 position: fixed;
                 inset: 0;
-                bottom: 44px;
+                top: 44px;
                 overflow: auto;
             }
 
@@ -59,7 +59,7 @@
             /* Toolbar */
             #toolbar {
                 position: fixed;
-                bottom: 0;
+                top: 0;
                 left: 0;
                 right: 0;
                 height: 44px;
@@ -68,7 +68,7 @@
                 gap: 2px;
                 padding: 0 8px;
                 background: var(--toolbar-bg);
-                border-top: 1px solid var(--toolbar-border);
+                border-bottom: 1px solid var(--toolbar-border);
                 z-index: 100;
             }
 
@@ -99,6 +99,16 @@
                 background: #555;
             }
 
+            #toolbar button:disabled {
+                opacity: 0.3;
+                cursor: default;
+            }
+
+            #toolbar button:disabled:hover {
+                background: transparent;
+                border-color: transparent;
+            }
+
             #play-btn.playing {
                 color: #4db870;
             }
@@ -121,16 +131,16 @@
                 color: #e55;
             }
 
-            /* Settings panel (slides up from toolbar) */
+            /* Settings panel (slides down from toolbar) */
             #settings-panel {
                 position: fixed;
-                bottom: 44px;
+                top: 44px;
                 right: 0;
                 width: 280px;
                 background: var(--panel-bg);
                 border: 1px solid var(--panel-border);
-                border-bottom: none;
-                border-radius: 6px 0 0 0;
+                border-top: none;
+                border-radius: 0 0 0 6px;
                 padding: 12px 16px;
                 z-index: 99;
                 display: none;
@@ -185,7 +195,7 @@
             /* Shared-code notification */
             #shared-notice {
                 position: fixed;
-                top: 12px;
+                top: 56px;
                 left: 50%;
                 transform: translateX(-50%);
                 background: rgba(40, 100, 60, 0.92);
@@ -207,7 +217,7 @@
         <div id="editor-root"></div>
 
         <div id="toolbar">
-            <button id="play-btn" title="Play / Evaluate (Ctrl+Enter)">
+            <button id="play-btn" title="Play / Stop (Ctrl+Enter)">
                 <svg
                     width="16"
                     height="16"
@@ -216,42 +226,35 @@
                     xmlns="http://www.w3.org/2000/svg"
                 >
                     <polygon id="play-icon" points="3,1 13,8 3,15" />
-                    <g id="pause-icon" style="display: none">
-                        <rect x="2" y="1" width="4" height="14" />
-                        <rect x="10" y="1" width="4" height="14" />
-                    </g>
+                    <rect
+                        id="stop-icon"
+                        x="3"
+                        y="3"
+                        width="10"
+                        height="10"
+                        style="display: none"
+                    />
                 </svg>
             </button>
-            <button id="stop-btn" title="Stop (Ctrl+.)">
-                <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="currentColor"
-                    xmlns="http://www.w3.org/2000/svg"
-                >
-                    <rect x="1" y="1" width="12" height="12" />
-                </svg>
-            </button>
-            <div class="spacer"></div>
-            <span id="status-text" class="status"></span>
-            <button id="share-btn" title="Share current pattern">
+            <button
+                id="update-btn"
+                title="Update (apply editor changes)"
+                disabled
+            >
                 <svg
                     width="16"
                     height="16"
                     viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
+                    fill="currentColor"
                     xmlns="http://www.w3.org/2000/svg"
                 >
-                    <circle cx="12" cy="3" r="2" />
-                    <circle cx="4" cy="8" r="2" />
-                    <circle cx="12" cy="13" r="2" />
-                    <line x1="10.3" y1="4" x2="5.7" y2="7" />
-                    <line x1="10.3" y1="12" x2="5.7" y2="9" />
+                    <path
+                        d="M13.5 2.5a7 7 0 1 0 1.5 4.5h-1.5a5.5 5.5 0 1 1-1.18-3.44L11 5h4V1l-1.5 1.5z"
+                    />
                 </svg>
             </button>
+            <div class="spacer"></div>
+            <span id="status-text" class="status"></span>
             <button id="settings-btn" title="Settings">
                 <svg
                     width="16"

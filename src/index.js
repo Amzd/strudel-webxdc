@@ -49,8 +49,8 @@ const mirror = new StrudelMirror({
     prebake,
     solo: true,
     sync: false,
-    onUpdateState: ({ started, error }) => {
-        updateToolbarState(started, error)
+    onUpdateState: ({ started, error, isDirty }) => {
+        updateToolbarState(started, error, isDirty)
     },
 })
 
@@ -62,15 +62,14 @@ syncSettingsPanel(savedSettings)
 // ── Toolbar wiring ───────────────────────────────────────────────────────────
 
 const playBtn = document.getElementById('play-btn')
-const stopBtn = document.getElementById('stop-btn')
+const updateBtn = document.getElementById('update-btn')
 const settingsBtn = document.getElementById('settings-btn')
-const shareBtn = document.getElementById('share-btn')
 const settingsPanel = document.getElementById('settings-panel')
 const statusText = document.getElementById('status-text')
 const sharedNotice = document.getElementById('shared-notice')
 
 playBtn.addEventListener('click', () => mirror.toggle())
-stopBtn.addEventListener('click', () => mirror.stop())
+updateBtn.addEventListener('click', () => mirror.evaluate())
 
 settingsBtn.addEventListener('click', () => {
     settingsPanel.classList.toggle('open')
@@ -83,19 +82,21 @@ document.addEventListener('click', (e) => {
     }
 })
 
-function updateToolbarState(started, error) {
+function updateToolbarState(started, error, isDirty) {
     const playIcon = document.getElementById('play-icon')
-    const pauseIcon = document.getElementById('pause-icon')
+    const stopIcon = document.getElementById('stop-icon')
 
     if (started) {
         playBtn.classList.add('playing')
         playIcon.style.display = 'none'
-        pauseIcon.style.display = ''
+        stopIcon.style.display = ''
     } else {
         playBtn.classList.remove('playing')
         playIcon.style.display = ''
-        pauseIcon.style.display = 'none'
+        stopIcon.style.display = 'none'
     }
+
+    updateBtn.disabled = !(started && isDirty)
 
     if (error) {
         statusText.textContent = String(error).replace(/^Error:\s*/i, '')
@@ -177,15 +178,6 @@ document
     })
 
 // ── WebXDC integration ───────────────────────────────────────────────────────
-
-shareBtn.addEventListener('click', () => {
-    window.webxdc.sendUpdate(
-        {
-            payload: { code: mirror.code },
-        },
-        'Shared pattern'
-    )
-})
 
 let noticeTimeout
 function showSharedNotice() {
