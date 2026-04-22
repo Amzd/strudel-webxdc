@@ -161,6 +161,23 @@
                 display: flex;
             }
 
+            #settings-panel .attribution {
+                margin-top: 12px;
+                font-size: 11px;
+                color: #666;
+                text-align: center;
+            }
+
+            #settings-panel .attribution a {
+                color: #888;
+                text-decoration: none;
+            }
+
+            #settings-panel .attribution a:hover {
+                color: #aaa;
+                text-decoration: underline;
+            }
+
             #settings-panel h3 {
                 margin: 0 0 4px;
                 font-size: 13px;
@@ -273,7 +290,9 @@
                     stroke-linejoin="round"
                     xmlns="http://www.w3.org/2000/svg"
                 >
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <path
+                        d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                    />
                     <polyline points="17 21 17 13 7 13 7 21" />
                     <polyline points="7 3 7 8 15 8" />
                 </svg>
@@ -353,6 +372,10 @@
                 >
                 <input type="checkbox" id="pattern-highlight-input" checked />
             </div>
+            <p class="attribution">
+                Powered by
+                <a href="https://strudel.cc" target="_blank">strudel.cc</a>
+            </p>
         </div>
 
         <div id="shared-notice">Pattern received — press ▶ to play</div>
