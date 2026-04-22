@@ -10,7 +10,7 @@
         <title>Strudel</title>
         <style>
             :root {
-                --background: #222;
+                --background: rgba(34, 34, 34, 0.7);
                 --foreground: #fff;
                 --toolbar-bg: rgba(30, 30, 30, 0.92);
                 --toolbar-border: #444;
@@ -24,6 +24,7 @@
             *,
             *::before,
             *::after {
+                --background: rgba(34, 34, 34, 0.7);
                 box-sizing: border-box;
             }
 
@@ -49,11 +50,14 @@
                 inset: 0;
                 top: 44px;
                 overflow: auto;
+                background-color: var(
+                    --background
+                ) !important; /* override default bg to make it transparent to show .pianoroll() */
             }
 
             #editor-root .cm-editor {
                 height: 100%;
-                background: transparent !important;
+                background: transparent;
             }
 
             #editor-root .cm-scroller {
