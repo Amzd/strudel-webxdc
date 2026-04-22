@@ -78,7 +78,7 @@ settingsBtn.addEventListener('click', () => {
 
 // Close settings panel when clicking outside
 document.addEventListener('click', (e) => {
-    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+    if (!settingsPanel.contains(e.target) && !settingsBtn.contains(e.target)) {
         settingsPanel.classList.remove('open')
     }
 })
