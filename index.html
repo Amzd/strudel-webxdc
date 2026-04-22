@@ -76,18 +76,18 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 36px;
-                height: 32px;
+                width: 38px;
+                height: 34px;
                 padding: 0;
                 background: transparent;
                 border: 1px solid transparent;
-                border-radius: 4px;
+                border-radius: 6px;
                 color: var(--foreground);
                 cursor: pointer;
-                font-size: 16px;
                 transition:
                     background 0.15s,
-                    border-color 0.15s;
+                    border-color 0.15s,
+                    color 0.15s;
             }
 
             #toolbar button:hover {
@@ -100,7 +100,7 @@
             }
 
             #toolbar button:disabled {
-                opacity: 0.3;
+                opacity: 0.25;
                 cursor: default;
             }
 
@@ -219,19 +219,31 @@
         <div id="toolbar">
             <button id="play-btn" title="Play / Stop (Ctrl+Enter)">
                 <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                     xmlns="http://www.w3.org/2000/svg"
                 >
-                    <polygon id="play-icon" points="3,1 13,8 3,15" />
+                    <polygon
+                        id="play-icon"
+                        points="6,3 20,12 6,21"
+                        fill="currentColor"
+                        stroke="currentColor"
+                    />
                     <rect
                         id="stop-icon"
-                        x="3"
-                        y="3"
-                        width="10"
-                        height="10"
+                        x="4"
+                        y="4"
+                        width="16"
+                        height="16"
+                        rx="2"
+                        fill="currentColor"
+                        stroke="currentColor"
                         style="display: none"
                     />
                 </svg>
@@ -242,29 +254,38 @@
                 disabled
             >
                 <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                     xmlns="http://www.w3.org/2000/svg"
                 >
-                    <path
-                        d="M13.5 2.5a7 7 0 1 0 1.5 4.5h-1.5a5.5 5.5 0 1 1-1.18-3.44L11 5h4V1l-1.5 1.5z"
-                    />
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
                 </svg>
             </button>
             <div class="spacer"></div>
             <span id="status-text" class="status"></span>
             <button id="settings-btn" title="Settings">
                 <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                     xmlns="http://www.w3.org/2000/svg"
                 >
+                    <circle cx="12" cy="12" r="3" />
                     <path
-                        d="M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm5.65-1.35-.9-.52a5 5 0 0 0 0-1.26l.9-.52a.5.5 0 0 0 .18-.68l-1-1.73a.5.5 0 0 0-.68-.18l-.9.52a5.1 5.1 0 0 0-1.09-.63V3.5a.5.5 0 0 0-.5-.5h-2a.5.5 0 0 0-.5.5v1.04a5.1 5.1 0 0 0-1.09.63l-.9-.52a.5.5 0 0 0-.68.18l-1 1.73a.5.5 0 0 0 .18.68l.9.52a5 5 0 0 0 0 1.26l-.9.52a.5.5 0 0 0-.18.68l1 1.73c.14.24.44.32.68.18l.9-.52a5.1 5.1 0 0 0 1.09.63v1.04c0 .28.22.5.5.5h2a.5.5 0 0 0 .5-.5v-1.04a5.1 5.1 0 0 0 1.09-.63l.9.52c.24.14.54.06.68-.18l1-1.73a.5.5 0 0 0-.18-.68z"
+                        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
                     />
                 </svg>
             </button>
