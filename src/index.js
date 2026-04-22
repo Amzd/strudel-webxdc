@@ -34,43 +34,30 @@ n("<0 1 2 3 4>*8").scale('G4 minor')
 
 initAudioOnFirstClick()
 
+// Pre-create the draw canvas before getDrawContext() is called so the library
+// reuses it (skipping its own creation and resize handler).  This lets us
+// position the canvas below the toolbar from the start.
+const TOOLBAR_HEIGHT = 44
+const drawCanvas = document.createElement('canvas')
+drawCanvas.id = 'test-canvas'
+const initialDpr = window.devicePixelRatio
+drawCanvas.width = window.innerWidth * initialDpr
+drawCanvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * initialDpr
+drawCanvas.style.cssText = `pointer-events:none;width:100%;height:calc(100% - ${TOOLBAR_HEIGHT}px);position:fixed;top:${TOOLBAR_HEIGHT}px;left:0`
+document.body.prepend(drawCanvas)
+
+let drawCanvasResizeTimeout
+window.addEventListener('resize', () => {
+    clearTimeout(drawCanvasResizeTimeout)
+    drawCanvasResizeTimeout = setTimeout(() => {
+        const dpr = window.devicePixelRatio
+        drawCanvas.width = window.innerWidth * dpr
+        drawCanvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * dpr
+    }, 200)
+})
+
 const drawContext = getDrawContext()
 const drawTime = [-2, 2]
-
-// The draw canvas is created lazily by strudel at top:0 covering the full viewport.
-// Reposition it to start below the toolbar so the piano roll appears in the editor area.
-const TOOLBAR_HEIGHT = 44
-
-function adjustDrawCanvas(canvas) {
-    const dpr = window.devicePixelRatio
-    canvas.style.top = `${TOOLBAR_HEIGHT}px`
-    canvas.style.height = `calc(100% - ${TOOLBAR_HEIGHT}px)`
-    canvas.height = (window.innerHeight - TOOLBAR_HEIGHT) * dpr
-}
-
-const drawCanvasObserver = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-            if (
-                node.nodeType === Node.ELEMENT_NODE &&
-                node.id === 'test-canvas'
-            ) {
-                adjustDrawCanvas(node)
-                drawCanvasObserver.disconnect()
-                // Re-adjust after the library's own resize handler (debounced 200 ms)
-                let resizeTimeout
-                window.addEventListener('resize', () => {
-                    clearTimeout(resizeTimeout)
-                    resizeTimeout = setTimeout(
-                        () => adjustDrawCanvas(node),
-                        250
-                    )
-                })
-            }
-        }
-    }
-})
-drawCanvasObserver.observe(document.body, { childList: true })
 
 const mirror = new StrudelMirror({
     defaultOutput: webaudioOutput,
