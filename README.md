@@ -1,6 +1,6 @@
 # Strudel
 
-This [webxdc](https://webxdc.org/) wraps strudel.cc and syncs the code between peers.
+This [webxdc](https://webxdc.org/) wraps [strudel.cc](https://strudel.cc/) and syncs the code between peers.
 
 # Getting started
 
