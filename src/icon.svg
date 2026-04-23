@@ -14,6 +14,7 @@
    <stop stop-color="#c5115b" offset="1" id="stop162"/>
   </linearGradient>
  </defs>
+ <rect width="250" height="256" fill="#1a2243"/>
  <g>
   <title>Layer 1</title>
   <g id="g10" transform="matrix(1.3333333,0,0,-1.3333333,0,249)">
