@@ -1,4 +1,8 @@
-import { StrudelMirror, codemirrorSettings } from '@strudel/codemirror'
+import {
+    StrudelMirror,
+    codemirrorSettings,
+    defaultSettings,
+} from '@strudel/codemirror'
 import { silence } from '@strudel/core'
 import { getDrawContext } from '@strudel/draw'
 import { transpiler } from '@strudel/transpiler'
@@ -9,6 +13,10 @@ import {
 } from '@strudel/webaudio'
 
 import { prebake } from './prebake.js'
+
+defaultSettings.isAutoCompletionEnabled = true
+defaultSettings.isLineWrappingEnabled = true
+defaultSettings.isBracketMatchingEnabled = true
 
 // Redirect soundfont data requests to locally bundled files (public/sounds/).
 // The @strudel/repl pre-built chunk has its own copy of fontloader.mjs with a
