@@ -1,6 +1,6 @@
-# Radio Station
+# Strudel
 
-A [webxdc](https://webxdc.org/) music playlist application that allows you to share mp3s and listen to them synced with each other, all peer to peer.
+This [webxdc](https://webxdc.org/) wraps strudel.cc and syncs the code between peers.
 
 # Getting started
 
