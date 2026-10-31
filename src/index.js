@@ -207,20 +207,30 @@ const editorState = document.getElementById('editor-state')
 const runningContent = document.getElementById('running-content')
 const runningMeta = document.getElementById('running-meta')
 const peersContent = document.getElementById('peers-content')
-const peersTitle = document.getElementById('peers-title')
-const tabs = document.querySelectorAll('.mobile-shared-tabs .tab')
+const tabsBar = document.querySelector('.mobile-shared-tabs')
+const sharedViews = document.querySelector('.shared-views')
+const runningTab = tabsBar.querySelector('[data-panel="running"]')
 
-for (const tab of tabs) {
-    tab.addEventListener('click', () => {
-        for (const t of tabs) t.classList.toggle('active', t === tab)
-        document
-            .getElementById('running-panel')
-            .classList.toggle('mobile-active', tab.dataset.panel === 'running')
-        document
-            .getElementById('peers-panel')
-            .classList.toggle('mobile-active', tab.dataset.panel === 'peers')
-    })
-}
+tabsBar.addEventListener('click', (event) => {
+    const tab = event.target.closest('.tab')
+    if (!tab) return
+    for (const t of tabsBar.querySelectorAll('.tab')) {
+        t.classList.toggle('active', t === tab)
+        t.setAttribute('aria-selected', t === tab ? 'true' : 'false')
+    }
+    const isRunning = tab.dataset.panel === 'running'
+    document
+        .getElementById('running-panel')
+        .classList.toggle('mobile-active', isRunning)
+    document
+        .getElementById('peers-panel')
+        .classList.toggle('mobile-active', !isRunning)
+    if (!isRunning && tab.dataset.peer) {
+        selectedPeerFrom = tab.dataset.peer
+        const entry = peerCards.get(tab.dataset.peer)
+        if (entry) peersContent.replaceChildren(entry.card)
+    }
+})
 
 function shortAddress(addr) {
     return addr.length > 12 ? `${addr.slice(0, 7)}…${addr.slice(-3)}` : addr
@@ -260,6 +270,52 @@ function renderEditorState() {
 }
 
 const peerCards = new Map()
+let orderedPeerIds = []
+let selectedPeerFrom = null
+
+function updatePeerLayout(peerCount) {
+    const wideLayout = window.matchMedia(
+        '(min-width: 560px) and (min-aspect-ratio: 6/5)'
+    ).matches
+    const availableColumns = Math.min(
+        3,
+        Math.floor((peersContent.clientWidth + 8) / 288)
+    )
+    const showGrid =
+        wideLayout && peerCount > 0 && peerCount <= availableColumns
+    peersContent.classList.toggle('peer-grid', showGrid)
+    peersContent.classList.toggle('peer-tabs-mode', !showGrid)
+    document
+        .getElementById('workspace')
+        .classList.toggle('peer-tabs-mode', !showGrid && peerCount > 0)
+    sharedViews.classList.toggle(
+        'peer-tabs-mode',
+        !showGrid && peerCount > 0
+    )
+    tabsBar.hidden = showGrid && peerCount > 0
+    if (peerCount) {
+        const cards = orderedPeerIds
+            .map((id) => peerCards.get(id)?.card)
+            .filter(Boolean)
+        const visibleCards = showGrid
+            ? cards
+            : [
+                  peerCards.get(selectedPeerFrom)?.card ??
+                      peerCards.get(orderedPeerIds[0])?.card,
+              ].filter(Boolean)
+        if (
+            visibleCards.length !== peersContent.children.length ||
+            visibleCards.some(
+                (card, index) => peersContent.children[index] !== card
+            )
+        ) {
+            peersContent.replaceChildren(...visibleCards)
+        }
+    }
+}
+
+new ResizeObserver(() => updatePeerLayout(peerCards.size)).observe(peersContent)
+window.addEventListener('resize', () => updatePeerLayout(peerCards.size))
 
 function renderShared({ running, peers }) {
     latestRunning = running
@@ -281,16 +337,14 @@ function renderShared({ running, peers }) {
 
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
-        .sort((a, b) => a.from.localeCompare(b.from))
+    orderedPeerIds = others.map((peer) => peer.from)
+    selectedPeerFrom =
+        [...others].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))[0]
+            ?.from ?? null
     document
         .getElementById('workspace')
         .classList.toggle('solo', others.length === 0)
-    const peerLabel = others.length
-        ? others.map((p) => p.name || shortAddress(p.from)).join(', ')
-        : 'Peers'
-    peersTitle.textContent = peerLabel
-    peersContent.classList.toggle('single-peer', others.length === 1)
-    tabs[1].textContent = peerLabel
+    tabsBar.replaceChildren(runningTab)
     if (!others.length) {
         peerCards.clear()
         viewers.forEach(
@@ -299,8 +353,20 @@ function renderShared({ running, peers }) {
         peersContent.replaceChildren(
             emptyState("Peers' drafts will appear here as they type.")
         )
-    } else {
-        peersContent.querySelector('.empty-state')?.remove()
+        const emptyTab = document.createElement('button')
+        emptyTab.className = 'tab active'
+        emptyTab.type = 'button'
+        emptyTab.setAttribute('role', 'tab')
+        emptyTab.dataset.panel = 'peers'
+        emptyTab.textContent = 'Peers'
+        emptyTab.setAttribute('aria-selected', 'true')
+        runningTab.classList.remove('active')
+        runningTab.setAttribute('aria-selected', 'false')
+        document
+            .getElementById('running-panel')
+            .classList.remove('mobile-active')
+        document.getElementById('peers-panel').classList.add('mobile-active')
+        tabsBar.append(emptyTab)
     }
     for (const peer of others) {
         let entry = peerCards.get(peer.from)
@@ -317,12 +383,37 @@ function renderShared({ running, peers }) {
             peerCards.set(peer.from, entry)
         }
         entry.name.textContent = peer.name || shortAddress(peer.from)
-        if (!entry.card.isConnected) peersContent.append(entry.card)
+        const peerTab = document.createElement('button')
+        peerTab.className = 'tab'
+        if (peer.from === selectedPeerFrom) peerTab.classList.add('active')
+        peerTab.type = 'button'
+        peerTab.setAttribute('role', 'tab')
+        peerTab.dataset.panel = 'peer'
+        peerTab.dataset.peer = peer.from
+        peerTab.textContent = peer.name || shortAddress(peer.from)
+        peerTab.setAttribute(
+            'aria-selected',
+            peer.from === selectedPeerFrom ? 'true' : 'false'
+        )
+        tabsBar.append(peerTab)
         getViewer(`peer:${peer.from}`, entry.body).update(
             peer.code,
             running?.code ?? null,
             peer.cursor
         )
+    }
+    if (others.length) {
+        document
+            .getElementById('running-panel')
+            .classList.remove('mobile-active')
+        document.getElementById('peers-panel').classList.add('mobile-active')
+        runningTab.classList.remove('active')
+        runningTab.setAttribute('aria-selected', 'false')
+        updatePeerLayout(others.length)
+    } else {
+        orderedPeerIds = []
+        selectedPeerFrom = null
+        updatePeerLayout(0)
     }
     renderEditorState()
 }
