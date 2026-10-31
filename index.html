@@ -156,7 +156,7 @@
                 overflow: auto;
             }
             #peers-panel {
-                grid-template-rows: auto minmax(0, 1fr);
+                grid-template-rows: minmax(0, 1fr);
             }
             #peers-content.peer-grid {
                 display: grid;
@@ -186,13 +186,21 @@
                 line-height: 1.4;
             }
             .peer-card {
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr);
                 min-width: 0;
+                overflow: hidden;
+                border: 1px solid var(--panel-border);
+                border-radius: 8px;
+                background: var(--panel-bg);
             }
             .peer-heading {
                 display: flex;
-                justify-content: space-between;
-                gap: 6px;
-                padding: 4px 8px 0;
+                align-items: center;
+                min-height: 28px;
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--panel-border);
+                background: var(--toolbar-bg);
                 font-size: 11px;
             }
             .peer-heading strong {
@@ -488,9 +496,6 @@
                     <div id="running-content" class="panel-content"></div>
                 </section>
                 <section id="peers-panel" class="panel mobile-active">
-                    <div class="panel-heading">
-                        <span class="panel-title">Peers</span>
-                    </div>
                     <div id="peers-content" class="panel-content"></div>
                 </section>
             </div>
