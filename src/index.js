@@ -12,6 +12,7 @@ import {
     webaudioOutput,
 } from '@strudel/webaudio'
 
+import { changedLineIndexes, mergeEditorText } from './merge.js'
 import { prebake } from './prebake.js'
 import { createCodeSync } from './sync.js'
 
@@ -58,9 +59,13 @@ const mirror = new StrudelMirror({
     prebake,
     solo: true,
     sync: false,
-    afterEval: ({ code }) => codeSync.publish(code),
+    // Only code that evaluated successfully is shared with peers
+    afterEval: ({ code }) => {
+        if (!applyingRemote) codeSync.publish(code)
+    },
     onUpdateState: ({ started, error, isDirty }) => {
         updateToolbarState(started, error, isDirty)
+        renderEditorState()
     },
 })
 
@@ -195,21 +200,118 @@ document
         applySetting('isTooltipEnabled', e.target.checked)
     })
 
-// ── View switching ───────────────────────────────────────────────────────────
+// ── Shared views (editor / running / peers) ──────────────────────────────────
 
-const viewButtons = document.querySelectorAll('#view-switch button')
-function setView(view) {
-    document.body.dataset.view = view
-    for (const btn of viewButtons) {
-        btn.classList.toggle('active', btn.dataset.view === view)
+const editorState = document.getElementById('editor-state')
+const runningContent = document.getElementById('running-content')
+const runningMeta = document.getElementById('running-meta')
+const peersContent = document.getElementById('peers-content')
+const peersTitle = document.getElementById('peers-title')
+const tabs = document.querySelectorAll('.mobile-shared-tabs .tab')
+
+for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+        for (const t of tabs) t.classList.toggle('active', t === tab)
+        document
+            .getElementById('running-panel')
+            .classList.toggle('mobile-active', tab.dataset.panel === 'running')
+        document
+            .getElementById('peers-panel')
+            .classList.toggle('mobile-active', tab.dataset.panel === 'peers')
+    })
+}
+
+function shortAddress(addr) {
+    return addr.length > 12 ? `${addr.slice(0, 7)}…${addr.slice(-3)}` : addr
+}
+
+function renderCode(container, code, compareCode) {
+    container.replaceChildren()
+    if (!code) {
+        container.textContent = 'Empty source'
+        return
     }
-    localStorage.setItem('view', view)
+    const changed =
+        typeof compareCode === 'string'
+            ? changedLineIndexes(compareCode, code)
+            : new Set()
+    const pre = document.createElement('pre')
+    pre.className = 'source-code'
+    code.split('\n').forEach((line, index) => {
+        const span = document.createElement('span')
+        span.className = changed.has(index)
+            ? 'source-line changed-line'
+            : 'source-line'
+        span.textContent = line || ' '
+        pre.append(span)
+    })
+    container.append(pre)
 }
-for (const btn of viewButtons) {
-    btn.addEventListener('click', () => setView(btn.dataset.view))
+
+function emptyState(text) {
+    const div = document.createElement('div')
+    div.className = 'empty-state'
+    div.textContent = text
+    return div
 }
-const savedView = localStorage.getItem('view')
-setView(['code', 'split', 'visual'].includes(savedView) ? savedView : 'split')
+
+let latestRunning = null
+
+function renderEditorState() {
+    const running = latestRunning
+    if (!running) {
+        editorState.textContent = 'Not run yet'
+        editorState.classList.remove('draft')
+        return
+    }
+    const differs = mirror.code !== running.code
+    editorState.textContent = differs ? 'Draft differs' : 'Matches running'
+    editorState.classList.toggle('draft', differs)
+}
+
+function renderShared({ running, peers }) {
+    latestRunning = running
+    const self = window.webxdc.selfAddr
+
+    if (running) {
+        runningMeta.textContent =
+            running.from === self
+                ? 'by you'
+                : `by ${running.name || shortAddress(running.from)}`
+        renderCode(runningContent, running.code, null)
+    } else {
+        runningMeta.textContent = ''
+        runningContent.replaceChildren(
+            emptyState('Code that plays successfully is shared here.')
+        )
+    }
+
+    const others = [...peers.values()]
+        .filter((p) => p.from !== self)
+        .sort((a, b) => a.from.localeCompare(b.from))
+    peersTitle.textContent = `Peers · ${others.length}`
+    tabs[1].textContent = peersTitle.textContent
+    peersContent.replaceChildren()
+    if (!others.length) {
+        peersContent.append(
+            emptyState("Peers' last playing code will appear here.")
+        )
+    }
+    for (const peer of others) {
+        const card = document.createElement('article')
+        card.className = 'peer-card'
+        const heading = document.createElement('div')
+        heading.className = 'peer-heading'
+        const name = document.createElement('strong')
+        name.textContent = peer.name || shortAddress(peer.from)
+        heading.append(name)
+        const body = document.createElement('div')
+        renderCode(body, peer.code, running?.code)
+        card.append(heading, body)
+        peersContent.append(card)
+    }
+    renderEditorState()
+}
 
 // ── WebXDC integration ───────────────────────────────────────────────────────
 
@@ -223,22 +325,33 @@ function showSharedNotice() {
     )
 }
 
-// Only code that evaluated successfully is published (afterEval above), so
-// incomplete code never reaches peers. Remote code is applied to the editor
-// and, if we are playing, evaluated right away.
-async function applyRemoteCode(code) {
-    if (code === mirror.code) return
-    mirror.setCode(code)
-    if (mirror.repl.scheduler.started) {
-        codeSync.suppressPublish = true
+// Code last known to be running. Local edits are merged against it so they
+// are never overwritten by an incoming snapshot.
+let baseCode = DEFAULT_CODE
+let applyingRemote = false
+
+async function onSharedChange(state) {
+    const { running } = state
+    renderShared(state)
+    if (!running || running.code === baseCode) return
+    const previous = baseCode
+    baseCode = running.code
+    const local = mirror.code
+    const merged = mergeEditorText(previous, local, running.code)
+    if (merged !== local) mirror.setCode(merged)
+    // Follow along live only when the editor has no local changes of its own
+    if (merged === running.code && mirror.repl.scheduler.started) {
+        applyingRemote = true
         try {
             await mirror.evaluate()
         } finally {
-            codeSync.suppressPublish = false
+            applyingRemote = false
         }
-    } else {
+    } else if (merged !== local) {
         showSharedNotice()
     }
+    renderEditorState()
 }
 
-const codeSync = createCodeSync(applyRemoteCode)
+const codeSync = createCodeSync(onSharedChange)
+renderShared(codeSync.state)

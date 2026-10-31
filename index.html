@@ -45,44 +45,171 @@
                 background: var(--background);
             }
 
-            #editor-root {
+            #workspace {
                 position: fixed;
-                inset: 0;
-                top: 44px;
+                inset: 44px 0 0 0;
+                padding: 6px;
+                display: grid;
+                gap: 6px;
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-rows: minmax(0, 1.2fr) minmax(0, 0.92fr);
+            }
+            .panel {
+                min-width: 0;
+                min-height: 0;
+                overflow: hidden;
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr);
+                border: 1px solid var(--panel-border);
+                border-radius: 8px;
+                background: var(--panel-bg);
+            }
+            .panel-heading {
+                min-height: 28px;
+                padding: 4px 8px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                border-bottom: 1px solid var(--panel-border);
+                background: var(--toolbar-bg);
+                font-size: 12px;
+            }
+            .panel-title {
+                font-weight: 700;
+            }
+            .small-meta {
+                color: #888;
+                font-size: 11px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .state-pill {
+                padding: 1px 8px;
+                border-radius: 999px;
+                font-size: 11px;
+                color: #4db870;
+                background: rgba(77, 184, 112, 0.15);
+            }
+            .state-pill.draft {
+                color: #e5a33d;
+                background: rgba(229, 163, 61, 0.15);
+            }
+            /* Editor panel stays see-through so .pianoroll() shows behind it */
+            #editor-panel {
+                background: transparent;
+            }
+            #editor-root {
+                position: relative;
+                min-height: 0;
                 overflow: auto;
                 background-color: var(
                     --background
                 ) !important; /* override default bg to make it transparent to show .pianoroll() */
             }
-
-            body[data-view='code'] #editor-root {
-                background-color: #1a1a1a !important;
+            .shared-views {
+                min-width: 0;
+                min-height: 0;
+                display: grid;
+                grid-template-rows: auto minmax(0, 1fr);
+                gap: 6px;
             }
-            body[data-view='split'] #editor-root {
-                bottom: 50%;
-            }
-            body[data-view='visual'] #editor-root {
+            .shared-views > .panel {
                 display: none;
             }
-            #view-switch {
+            .shared-views > .panel.mobile-active {
+                display: grid;
+            }
+            .mobile-shared-tabs {
                 display: flex;
-                margin-left: 8px;
-                border: 1px solid var(--toolbar-border);
-                border-radius: 6px;
+                border: 1px solid var(--panel-border);
+                border-radius: 8px;
                 overflow: hidden;
+                background: var(--toolbar-bg);
             }
-            #toolbar #view-switch button {
-                width: auto;
-                height: 28px;
-                padding: 0 10px;
-                border: none;
-                border-radius: 0;
-                font: inherit;
-                font-size: 12px;
+            .tab {
+                padding: 5px 10px;
+                border: 0;
+                border-bottom: 2px solid transparent;
+                color: #888;
+                background: transparent;
+                font: 600 12px monospace;
+                cursor: pointer;
             }
-            #toolbar #view-switch button.active {
-                background: var(--btn-hover);
+            .tab.active {
                 color: #4db870;
+                border-bottom-color: #4db870;
+            }
+            .panel-content {
+                min-height: 0;
+                padding: 6px;
+                overflow: auto;
+            }
+            .empty-state {
+                color: #888;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+            .peer-card + .peer-card {
+                margin-top: 8px;
+                padding-top: 6px;
+                border-top: 1px solid var(--panel-border);
+            }
+            .peer-heading {
+                display: flex;
+                justify-content: space-between;
+                gap: 6px;
+                margin-bottom: 4px;
+                font-size: 11px;
+            }
+            .peer-heading strong {
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .source-code {
+                margin: 0;
+                font: 12px/1.4 monospace;
+                tab-size: 2;
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+            }
+            .source-line {
+                display: block;
+                min-height: 1.4em;
+                padding-inline: 4px;
+            }
+            .changed-line {
+                color: #e5a33d;
+                background: rgba(229, 163, 61, 0.15);
+            }
+            @media (min-width: 560px) and (min-aspect-ratio: 6/5) {
+                #workspace {
+                    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+                    grid-template-rows: minmax(0, 1fr) minmax(0, 0.72fr);
+                }
+                .shared-views {
+                    display: contents;
+                }
+                .mobile-shared-tabs {
+                    display: none;
+                }
+                .shared-views > .panel {
+                    display: grid;
+                }
+                #editor-panel {
+                    grid-column: 1;
+                    grid-row: 1;
+                }
+                #running-panel {
+                    grid-column: 2;
+                    grid-row: 1;
+                }
+                #peers-panel {
+                    grid-column: 1 / -1;
+                    grid-row: 2;
+                }
             }
             #editor-root .cm-editor {
                 height: 100%;
@@ -270,8 +397,41 @@
             }
         </style>
     </head>
-    <body data-view="split">
-        <div id="editor-root"></div>
+    <body>
+        <main id="workspace">
+            <section id="editor-panel" class="panel">
+                <div class="panel-heading">
+                    <span class="panel-title">Your editor</span>
+                    <span id="editor-state" class="state-pill"
+                        >Not run yet</span
+                    >
+                </div>
+                <div id="editor-root"></div>
+            </section>
+            <div class="shared-views">
+                <div class="mobile-shared-tabs" role="tablist">
+                    <button class="tab" data-panel="running">Running</button>
+                    <button class="tab active" data-panel="peers">
+                        Peers · 0
+                    </button>
+                </div>
+                <section id="running-panel" class="panel">
+                    <div class="panel-heading">
+                        <span class="panel-title">Running</span>
+                        <span id="running-meta" class="small-meta"></span>
+                    </div>
+                    <div id="running-content" class="panel-content"></div>
+                </section>
+                <section id="peers-panel" class="panel mobile-active">
+                    <div class="panel-heading">
+                        <span class="panel-title" id="peers-title"
+                            >Peers · 0</span
+                        >
+                    </div>
+                    <div id="peers-content" class="panel-content"></div>
+                </section>
+            </div>
+        </main>
 
         <div id="toolbar">
             <button id="play-btn" title="Play / Stop (Ctrl+Enter)">
@@ -328,13 +488,6 @@
                     <polyline points="7 3 7 8 15 8" />
                 </svg>
             </button>
-            <div id="view-switch" role="tablist">
-                <button data-view="code" title="Code only">Code</button>
-                <button data-view="split" title="Code and visuals">
-                    Split
-                </button>
-                <button data-view="visual" title="Visuals only">Visual</button>
-            </div>
             <div class="spacer"></div>
             <span id="status-text" class="status"></span>
             <button id="settings-btn" title="Settings">
