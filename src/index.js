@@ -208,6 +208,7 @@ const runningContent = document.getElementById('running-content')
 const runningMeta = document.getElementById('running-meta')
 const peersContent = document.getElementById('peers-content')
 const peersTitle = document.getElementById('peers-title')
+const peerTabs = document.getElementById('peer-tabs')
 const tabs = document.querySelectorAll('.mobile-shared-tabs .tab')
 
 for (const tab of tabs) {
@@ -261,6 +262,31 @@ function renderEditorState() {
 
 const peerCards = new Map()
 
+function updatePeerLayout(peerCount) {
+    const availableColumns = Math.min(
+        3,
+        Math.floor((peersContent.clientWidth + 8) / 288)
+    )
+    const showGrid = peerCount > 0 && peerCount <= availableColumns
+    peersContent.classList.toggle('peer-grid', showGrid)
+    peersContent.classList.toggle('peer-tabs-mode', !showGrid)
+    peerTabs.hidden = showGrid || peerCount === 0
+}
+
+new ResizeObserver(() => updatePeerLayout(peerCards.size)).observe(peersContent)
+
+peerTabs.addEventListener('click', (event) => {
+    const tab = event.target.closest('.peer-tab')
+    if (!tab) return
+    const activeTab = peerTabs.querySelector('.active')
+    activeTab?.classList.remove('active')
+    activeTab?.setAttribute('aria-selected', 'false')
+    tab.classList.add('active')
+    tab.setAttribute('aria-selected', 'true')
+    const entry = peerCards.get(tab.dataset.peer)
+    if (entry) peersContent.replaceChildren(entry.card)
+})
+
 function renderShared({ running, peers }) {
     latestRunning = running
     const self = window.webxdc.selfAddr
@@ -281,16 +307,12 @@ function renderShared({ running, peers }) {
 
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
-        .sort((a, b) => a.from.localeCompare(b.from))
+        .sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))
     document
         .getElementById('workspace')
         .classList.toggle('solo', others.length === 0)
-    const peerLabel = others.length
-        ? others.map((p) => p.name || shortAddress(p.from)).join(', ')
-        : 'Peers'
-    peersTitle.textContent = peerLabel
-    peersContent.classList.toggle('single-peer', others.length === 1)
-    tabs[1].textContent = peerLabel
+    peersTitle.textContent = 'Peers'
+    tabs[1].textContent = 'Peers'
     if (!others.length) {
         peerCards.clear()
         viewers.forEach(
@@ -299,8 +321,10 @@ function renderShared({ running, peers }) {
         peersContent.replaceChildren(
             emptyState("Peers' drafts will appear here as they type.")
         )
+        peerTabs.replaceChildren()
     } else {
         peersContent.querySelector('.empty-state')?.remove()
+        peerTabs.replaceChildren()
     }
     for (const peer of others) {
         let entry = peerCards.get(peer.from)
@@ -317,12 +341,35 @@ function renderShared({ running, peers }) {
             peerCards.set(peer.from, entry)
         }
         entry.name.textContent = peer.name || shortAddress(peer.from)
-        if (!entry.card.isConnected) peersContent.append(entry.card)
+        const peerTab = document.createElement('button')
+        peerTab.className = 'tab peer-tab'
+        peerTab.type = 'button'
+        peerTab.setAttribute('role', 'tab')
+        peerTab.setAttribute(
+            'aria-selected',
+            peer === others[0] ? 'true' : 'false'
+        )
+        peerTab.dataset.peer = peer.from
+        peerTab.textContent = peer.name || shortAddress(peer.from)
+        peerTab.classList.toggle('active', peer === others[0])
+        peerTabs.append(peerTab)
         getViewer(`peer:${peer.from}`, entry.body).update(
             peer.code,
             running?.code ?? null,
             peer.cursor
         )
+    }
+    if (others.length) {
+        updatePeerLayout(others.length)
+        if (peersContent.classList.contains('peer-grid')) {
+            peersContent.replaceChildren(
+                ...others.map((peer) => peerCards.get(peer.from).card)
+            )
+        } else {
+            peersContent.replaceChildren(peerCards.get(others[0].from).card)
+        }
+    } else {
+        updatePeerLayout(0)
     }
     renderEditorState()
 }

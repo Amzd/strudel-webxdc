@@ -153,16 +153,46 @@
                 padding: 0;
                 overflow: auto;
             }
+            #peers-panel {
+                grid-template-rows: auto minmax(0, 1fr) auto;
+            }
+            #peers-content.peer-grid {
+                display: grid;
+                grid-template-columns: repeat(
+                    auto-fit,
+                    minmax(min(280px, 100%), 1fr)
+                );
+                align-content: start;
+                gap: 8px;
+            }
+            #peers-content.peer-tabs-mode .peer-heading {
+                display: none;
+            }
+            .peer-tabs {
+                display: flex;
+                min-width: 0;
+                overflow-x: auto;
+                border-top: 1px solid var(--panel-border);
+                background: var(--toolbar-bg);
+            }
+            .peer-tab {
+                flex: 0 0 auto;
+                max-width: 180px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .peer-tabs[hidden] {
+                display: none;
+            }
             .empty-state {
                 padding: 6px;
                 color: #888;
                 font-size: 12px;
                 line-height: 1.4;
             }
-            .peer-card + .peer-card {
-                margin-top: 8px;
-                padding-top: 6px;
-                border-top: 1px solid var(--panel-border);
+            .peer-card {
+                min-width: 0;
             }
             .peer-heading {
                 display: flex;
@@ -455,6 +485,7 @@
                         <span class="panel-title" id="peers-title">Peers</span>
                     </div>
                     <div id="peers-content" class="panel-content"></div>
+                    <div id="peer-tabs" class="peer-tabs" role="tablist" hidden></div>
                 </section>
             </div>
         </main>
