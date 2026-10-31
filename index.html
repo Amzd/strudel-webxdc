@@ -164,6 +164,9 @@
                 padding: 4px 8px 0;
                 font-size: 11px;
             }
+            .single-peer .peer-heading {
+                display: none;
+            }
             .peer-heading strong {
                 overflow: hidden;
                 text-overflow: ellipsis;
@@ -431,9 +434,7 @@
             <div class="shared-views">
                 <div class="mobile-shared-tabs" role="tablist">
                     <button class="tab" data-panel="running">Running</button>
-                    <button class="tab active" data-panel="peers">
-                        Peers · 0
-                    </button>
+                    <button class="tab active" data-panel="peers">Peers</button>
                 </div>
                 <section id="running-panel" class="panel">
                     <div class="panel-heading">
@@ -444,9 +445,7 @@
                 </section>
                 <section id="peers-panel" class="panel mobile-active">
                     <div class="panel-heading">
-                        <span class="panel-title" id="peers-title"
-                            >Peers · 0</span
-                        >
+                        <span class="panel-title" id="peers-title">Peers</span>
                     </div>
                     <div id="peers-content" class="panel-content"></div>
                 </section>

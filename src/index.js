@@ -282,8 +282,12 @@ function renderShared({ running, peers }) {
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
         .sort((a, b) => a.from.localeCompare(b.from))
-    peersTitle.textContent = `Peers · ${others.length}`
-    tabs[1].textContent = peersTitle.textContent
+    const peerLabel = others.length
+        ? others.map((p) => p.name || shortAddress(p.from)).join(', ')
+        : 'Peers'
+    peersTitle.textContent = peerLabel
+    peersContent.classList.toggle('single-peer', others.length === 1)
+    tabs[1].textContent = peerLabel
     if (!others.length) {
         peerCards.clear()
         viewers.forEach(

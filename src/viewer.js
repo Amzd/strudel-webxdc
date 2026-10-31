@@ -58,15 +58,8 @@ export function createViewer(parent) {
                 marker.style.height = `${p.bottom - p.top}px`
                 marker.style.left = `${p.left}px`
                 overlay.append(marker)
-                const scroller = view.scrollDOM
-                if (p.top < scroller.scrollTop) {
-                    scroller.scrollTop = p.top
-                } else if (
-                    p.bottom >
-                    scroller.scrollTop + scroller.clientHeight
-                ) {
-                    scroller.scrollTop = p.bottom - scroller.clientHeight
-                }
+                // Follow the cursor in every scrollable ancestor
+                marker.scrollIntoView({ block: 'nearest', inline: 'nearest' })
             }
         }
     }
