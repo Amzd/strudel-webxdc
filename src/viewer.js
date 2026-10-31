@@ -1,4 +1,8 @@
-import { initEditor } from '@strudel/codemirror'
+import {
+    highlightMiniLocations,
+    initEditor,
+    updateMiniLocations,
+} from '@strudel/codemirror'
 
 import { changedLineIndexes } from './merge.js'
 
@@ -92,6 +96,18 @@ export function createViewer(parent) {
             }
             // Positions can only be measured after layout
             requestAnimationFrame(drawOverlay)
+        },
+        updatePatternLocations(locations) {
+            updateMiniLocations(view, locations)
+        },
+        highlight(haps, time) {
+            highlightMiniLocations(view, time, haps)
+        },
+        clearPatternHighlights() {
+            highlightMiniLocations(view, 0, [])
+        },
+        destroy() {
+            view.destroy()
         },
     }
 }
