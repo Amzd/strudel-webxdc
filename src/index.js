@@ -12,9 +12,10 @@ import {
     webaudioOutput,
 } from '@strudel/webaudio'
 
-import { changedLineIndexes, mergeEditorText } from './merge.js'
+import { mergeEditorText } from './merge.js'
 import { prebake } from './prebake.js'
 import { createCodeSync } from './sync.js'
+import { createViewer } from './viewer.js'
 
 defaultSettings.isAutoCompletionEnabled = true
 defaultSettings.isLineWrappingEnabled = true
@@ -225,46 +226,16 @@ function shortAddress(addr) {
     return addr.length > 12 ? `${addr.slice(0, 7)}…${addr.slice(-3)}` : addr
 }
 
-function renderCode(container, code, compareCode, cursor = null) {
-    container.replaceChildren()
-    if (!code) {
-        container.textContent = 'Empty source'
-        return
+const viewers = new Map()
+
+function getViewer(key, container) {
+    let viewer = viewers.get(key)
+    if (!viewer || !container.contains(viewer.dom)) {
+        container.replaceChildren()
+        viewer = createViewer(container)
+        viewers.set(key, viewer)
     }
-    const changed =
-        typeof compareCode === 'string'
-            ? changedLineIndexes(compareCode, code)
-            : new Set()
-    const bounded =
-        cursor === null ? null : Math.max(0, Math.min(code.length, cursor))
-    const before = bounded === null ? '' : code.slice(0, bounded)
-    const cursorLine = bounded === null ? -1 : before.split('\n').length - 1
-    const cursorColumn = before.length - (before.lastIndexOf('\n') + 1)
-    const pre = document.createElement('pre')
-    pre.className = 'source-code'
-    let cursorSpan = null
-    code.split('\n').forEach((line, index) => {
-        const span = document.createElement('span')
-        span.className = changed.has(index)
-            ? 'source-line changed-line'
-            : 'source-line'
-        if (index === cursorLine) {
-            span.classList.add('peer-cursor-line')
-            const marker = document.createElement('i')
-            marker.className = 'peer-cursor-marker'
-            span.append(
-                line.slice(0, cursorColumn),
-                marker,
-                line.slice(cursorColumn) || (line ? '' : ' ')
-            )
-            cursorSpan = span
-        } else {
-            span.textContent = line || ' '
-        }
-        pre.append(span)
-    })
-    container.append(pre)
-    cursorSpan?.scrollIntoView({ block: 'nearest' })
+    return viewer
 }
 
 function emptyState(text) {
@@ -288,6 +259,8 @@ function renderEditorState() {
     editorState.classList.toggle('draft', differs)
 }
 
+const peerCards = new Map()
+
 function renderShared({ running, peers }) {
     latestRunning = running
     const self = window.webxdc.selfAddr
@@ -297,9 +270,10 @@ function renderShared({ running, peers }) {
             running.from === self
                 ? 'by you'
                 : `by ${running.name || shortAddress(running.from)}`
-        renderCode(runningContent, running.code, null)
+        getViewer('running', runningContent).update(running.code)
     } else {
         runningMeta.textContent = ''
+        viewers.delete('running')
         runningContent.replaceChildren(
             emptyState('Code that plays successfully is shared here.')
         )
@@ -310,24 +284,38 @@ function renderShared({ running, peers }) {
         .sort((a, b) => a.from.localeCompare(b.from))
     peersTitle.textContent = `Peers · ${others.length}`
     tabs[1].textContent = peersTitle.textContent
-    peersContent.replaceChildren()
     if (!others.length) {
-        peersContent.append(
-            emptyState("Peers' last playing code will appear here.")
+        peerCards.clear()
+        viewers.forEach(
+            (_, key) => key.startsWith('peer:') && viewers.delete(key)
         )
+        peersContent.replaceChildren(
+            emptyState("Peers' drafts will appear here as they type.")
+        )
+    } else {
+        peersContent.querySelector('.empty-state')?.remove()
     }
     for (const peer of others) {
-        const card = document.createElement('article')
-        card.className = 'peer-card'
-        const heading = document.createElement('div')
-        heading.className = 'peer-heading'
-        const name = document.createElement('strong')
-        name.textContent = peer.name || shortAddress(peer.from)
-        heading.append(name)
-        const body = document.createElement('div')
-        renderCode(body, peer.code, running?.code, peer.cursor)
-        card.append(heading, body)
-        peersContent.append(card)
+        let entry = peerCards.get(peer.from)
+        if (!entry) {
+            const card = document.createElement('article')
+            card.className = 'peer-card'
+            const heading = document.createElement('div')
+            heading.className = 'peer-heading'
+            const name = document.createElement('strong')
+            const body = document.createElement('div')
+            heading.append(name)
+            card.append(heading, body)
+            entry = { card, name, body }
+            peerCards.set(peer.from, entry)
+        }
+        entry.name.textContent = peer.name || shortAddress(peer.from)
+        if (!entry.card.isConnected) peersContent.append(entry.card)
+        getViewer(`peer:${peer.from}`, entry.body).update(
+            peer.code,
+            running?.code ?? null,
+            peer.cursor
+        )
     }
     renderEditorState()
 }
