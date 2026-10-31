@@ -132,7 +132,9 @@
                 display: flex;
                 border: 1px solid var(--panel-border);
                 border-radius: 8px;
-                overflow: hidden;
+                min-width: 0;
+                overflow-x: auto;
+                overflow-y: hidden;
                 background: var(--toolbar-bg);
             }
             .tab {
@@ -154,7 +156,7 @@
                 overflow: auto;
             }
             #peers-panel {
-                grid-template-rows: auto minmax(0, 1fr) auto;
+                grid-template-rows: auto minmax(0, 1fr);
             }
             #peers-content.peer-grid {
                 display: grid;
@@ -168,22 +170,14 @@
             #peers-content.peer-tabs-mode .peer-heading {
                 display: none;
             }
-            .peer-tabs {
-                display: flex;
-                min-width: 0;
-                overflow-x: auto;
-                border-top: 1px solid var(--panel-border);
-                background: var(--toolbar-bg);
-            }
-            .peer-tab {
+            .mobile-shared-tabs .tab {
                 flex: 0 0 auto;
+            }
+            .mobile-shared-tabs .tab[data-peer] {
                 max-width: 180px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-            }
-            .peer-tabs[hidden] {
-                display: none;
             }
             .empty-state {
                 padding: 6px;
@@ -200,9 +194,6 @@
                 gap: 6px;
                 padding: 4px 8px 0;
                 font-size: 11px;
-            }
-            .single-peer .peer-heading {
-                display: none;
             }
             .peer-heading strong {
                 overflow: hidden;
@@ -255,6 +246,24 @@
                 .mobile-shared-tabs {
                     display: none;
                 }
+                .shared-views.peer-tabs-mode {
+                    display: grid;
+                    grid-column: 2;
+                    grid-row: 1 / -1;
+                    grid-template-rows: auto minmax(0, 1fr);
+                }
+                .shared-views.peer-tabs-mode .mobile-shared-tabs {
+                    display: flex;
+                }
+                .shared-views.peer-tabs-mode > .panel {
+                    display: none;
+                }
+                .shared-views.peer-tabs-mode > .panel.mobile-active {
+                    display: grid;
+                }
+                #workspace.peer-tabs-mode #editor-panel {
+                    grid-row: 1 / -1;
+                }
                 .shared-views > .panel {
                     display: grid;
                 }
@@ -268,6 +277,11 @@
                 }
                 #peers-panel {
                     grid-column: 1 / -1;
+                    grid-row: 2;
+                }
+                #workspace.peer-tabs-mode #running-panel,
+                #workspace.peer-tabs-mode #peers-panel {
+                    grid-column: 2;
                     grid-row: 2;
                 }
             }
@@ -470,8 +484,14 @@
             </section>
             <div class="shared-views">
                 <div class="mobile-shared-tabs" role="tablist">
-                    <button class="tab" data-panel="running">Running</button>
-                    <button class="tab active" data-panel="peers">Peers</button>
+                    <button
+                        class="tab"
+                        data-panel="running"
+                        role="tab"
+                        aria-selected="false"
+                    >
+                        Running
+                    </button>
                 </div>
                 <section id="running-panel" class="panel">
                     <div class="panel-heading">
@@ -482,10 +502,9 @@
                 </section>
                 <section id="peers-panel" class="panel mobile-active">
                     <div class="panel-heading">
-                        <span class="panel-title" id="peers-title">Peers</span>
+                        <span class="panel-title">Peers</span>
                     </div>
                     <div id="peers-content" class="panel-content"></div>
-                    <div id="peer-tabs" class="peer-tabs" role="tablist" hidden></div>
                 </section>
             </div>
         </main>
