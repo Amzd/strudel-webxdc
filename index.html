@@ -128,6 +128,9 @@
             .shared-views > .panel.mobile-active {
                 display: grid;
             }
+            .shared-views > #running-panel {
+                display: none;
+            }
             .mobile-shared-tabs {
                 display: flex;
                 border: 1px solid var(--panel-border);
@@ -268,6 +271,9 @@
                     grid-row: 3;
                 }
                 .shared-views > .panel {
+                    display: grid;
+                }
+                .shared-views > #running-panel {
                     display: grid;
                 }
                 #editor-panel {
@@ -481,16 +487,7 @@
                 <div id="editor-root"></div>
             </section>
             <div class="shared-views">
-                <div class="mobile-shared-tabs" role="tablist">
-                    <button
-                        class="tab"
-                        data-panel="running"
-                        role="tab"
-                        aria-selected="false"
-                    >
-                        Running
-                    </button>
-                </div>
+                <div class="mobile-shared-tabs" role="tablist"></div>
                 <section id="running-panel" class="panel">
                     <div class="panel-heading">
                         <span class="panel-title">Running</span>

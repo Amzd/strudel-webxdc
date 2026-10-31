@@ -263,7 +263,6 @@ const runningMeta = document.getElementById('running-meta')
 const peersContent = document.getElementById('peers-content')
 const tabsBar = document.querySelector('.mobile-shared-tabs')
 const sharedViews = document.querySelector('.shared-views')
-const runningTab = tabsBar.querySelector('[data-panel="running"]')
 
 tabsBar.addEventListener('click', (event) => {
     const tab = event.target.closest('.tab')
@@ -342,10 +341,7 @@ function updatePeerLayout(peerCount) {
     document
         .getElementById('workspace')
         .classList.toggle('peer-tabs-mode', !showGrid && peerCount > 0)
-    sharedViews.classList.toggle(
-        'peer-tabs-mode',
-        !showGrid && peerCount > 0
-    )
+    sharedViews.classList.toggle('peer-tabs-mode', !showGrid && peerCount > 0)
     tabsBar.hidden = showGrid && peerCount > 0
     if (peerCount) {
         const cards = orderedPeerIds
@@ -393,8 +389,7 @@ function renderShared({ running, peers }) {
         )
     }
 
-    const others = [...peers.values()]
-        .filter((p) => p.from !== self)
+    const others = [...peers.values()].filter((p) => p.from !== self)
     orderedPeerIds = others.map((peer) => peer.from)
     selectedPeerFrom =
         [...others].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))[0]
@@ -402,7 +397,7 @@ function renderShared({ running, peers }) {
     document
         .getElementById('workspace')
         .classList.toggle('solo', others.length === 0)
-    tabsBar.replaceChildren(runningTab)
+    tabsBar.replaceChildren()
     if (!others.length) {
         peerCards.clear()
         viewers.forEach(
@@ -418,8 +413,6 @@ function renderShared({ running, peers }) {
         emptyTab.dataset.panel = 'peers'
         emptyTab.textContent = 'Peers'
         emptyTab.setAttribute('aria-selected', 'true')
-        runningTab.classList.remove('active')
-        runningTab.setAttribute('aria-selected', 'false')
         document
             .getElementById('running-panel')
             .classList.remove('mobile-active')
@@ -465,8 +458,6 @@ function renderShared({ running, peers }) {
             .getElementById('running-panel')
             .classList.remove('mobile-active')
         document.getElementById('peers-panel').classList.add('mobile-active')
-        runningTab.classList.remove('active')
-        runningTab.setAttribute('aria-selected', 'false')
         updatePeerLayout(others.length)
     } else {
         orderedPeerIds = []
