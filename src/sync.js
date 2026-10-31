@@ -85,7 +85,8 @@ export function createCodeSync(onChange) {
         console.warn('realtime channel unavailable', e)
     }
 
-    wx.setUpdateListener((update) => receive(update.payload))
+    // Resolves once the stored history has been replayed
+    const ready = wx.setUpdateListener((update) => receive(update.payload))
 
     let lastOwnTs = 0
     const nextTs = () => (lastOwnTs = Math.max(Date.now(), lastOwnTs + 1))
@@ -142,6 +143,7 @@ export function createCodeSync(onChange) {
 
     return {
         state,
+        ready,
         /** @param {string} code @param {number} cursor */
         publishDraft(code, cursor) {
             const msg = send('draft', code, cursor)

@@ -345,17 +345,14 @@ async function onSharedChange(state) {
     const { running } = state
     renderShared(state)
     if (!running || running.code === baseCode) return
-    if (running.from === window.webxdc.selfAddr) {
-        baseCode = running.code
-        return
-    }
     const previous = baseCode
     baseCode = running.code
     const local = mirror.code
     const merged = mergeEditorText(previous, local, running.code)
     if (merged !== local) mirror.setCode(merged)
     // Follow along live only when the editor has no local changes of its own
-    if (merged === running.code && mirror.repl.scheduler.started) {
+    const isOwn = running.from === window.webxdc.selfAddr
+    if (!isOwn && merged === running.code && mirror.repl.scheduler.started) {
         applyingRemote = true
         try {
             await mirror.evaluate()
@@ -377,7 +374,7 @@ function cursorPos() {
 
 // Share the in-progress draft and cursor (display only; never evaluated)
 let sentDraft = null
-setInterval(() => {
+function shareDraft() {
     const draft = { code: mirror.code, cursor: cursorPos() }
     if (sentDraft?.code === draft.code && sentDraft.cursor === draft.cursor) {
         return
@@ -385,4 +382,20 @@ setInterval(() => {
     sentDraft = draft
     codeSync.publishDraft(draft.code, draft.cursor)
     renderEditorState()
-}, 300)
+}
+
+// Start from the synced code instead of the default: restore this user's last
+// draft if it is newer than the running code, otherwise the running code.
+// Drafts are only shared once history has replayed so the default never
+// overwrites what peers (or this user) already shared.
+codeSync.ready.then(() => {
+    const { running, peers } = codeSync.state
+    const own = peers.get(window.webxdc.selfAddr)
+    const target = own && (!running || own.ts > running.ts) ? own : running
+    if (target && mirror.code === DEFAULT_CODE && target.code !== mirror.code) {
+        mirror.setCode(target.code)
+        baseCode = running?.code ?? baseCode
+    }
+    renderEditorState()
+    setInterval(shareDraft, 300)
+})
