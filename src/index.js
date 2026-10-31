@@ -210,10 +210,12 @@ const peersContent = document.getElementById('peers-content')
 const tabsBar = document.querySelector('.mobile-shared-tabs')
 const sharedViews = document.querySelector('.shared-views')
 const runningTab = tabsBar.querySelector('[data-panel="running"]')
+let selectedPanel = 'running'
 
 tabsBar.addEventListener('click', (event) => {
     const tab = event.target.closest('.tab')
     if (!tab) return
+    selectedPanel = tab.dataset.panel === 'running' ? 'running' : 'peers'
     for (const t of tabsBar.querySelectorAll('.tab')) {
         t.classList.toggle('active', t === tab)
         t.setAttribute('aria-selected', t === tab ? 'true' : 'false')
@@ -338,9 +340,12 @@ function renderShared({ running, peers }) {
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
     orderedPeerIds = others.map((peer) => peer.from)
-    selectedPeerFrom =
-        [...others].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))[0]
-            ?.from ?? null
+    if (!others.some((peer) => peer.from === selectedPeerFrom)) {
+        selectedPeerFrom =
+            [...others].sort(
+                (a, b) => b.ts - a.ts || b.id.localeCompare(a.id)
+            )[0]?.from ?? null
+    }
     document
         .getElementById('workspace')
         .classList.toggle('solo', others.length === 0)
@@ -354,18 +359,16 @@ function renderShared({ running, peers }) {
             emptyState("Peers' drafts will appear here as they type.")
         )
         const emptyTab = document.createElement('button')
-        emptyTab.className = 'tab active'
+        emptyTab.className = 'tab'
         emptyTab.type = 'button'
         emptyTab.setAttribute('role', 'tab')
         emptyTab.dataset.panel = 'peers'
         emptyTab.textContent = 'Peers'
-        emptyTab.setAttribute('aria-selected', 'true')
-        runningTab.classList.remove('active')
-        runningTab.setAttribute('aria-selected', 'false')
-        document
-            .getElementById('running-panel')
-            .classList.remove('mobile-active')
-        document.getElementById('peers-panel').classList.add('mobile-active')
+        emptyTab.classList.toggle('active', selectedPanel === 'peers')
+        emptyTab.setAttribute(
+            'aria-selected',
+            selectedPanel === 'peers' ? 'true' : 'false'
+        )
         tabsBar.append(emptyTab)
     }
     for (const peer of others) {
@@ -385,7 +388,9 @@ function renderShared({ running, peers }) {
         entry.name.textContent = peer.name || shortAddress(peer.from)
         const peerTab = document.createElement('button')
         peerTab.className = 'tab'
-        if (peer.from === selectedPeerFrom) peerTab.classList.add('active')
+        if (selectedPanel === 'peers' && peer.from === selectedPeerFrom) {
+            peerTab.classList.add('active')
+        }
         peerTab.type = 'button'
         peerTab.setAttribute('role', 'tab')
         peerTab.dataset.panel = 'peer'
@@ -393,7 +398,9 @@ function renderShared({ running, peers }) {
         peerTab.textContent = peer.name || shortAddress(peer.from)
         peerTab.setAttribute(
             'aria-selected',
-            peer.from === selectedPeerFrom ? 'true' : 'false'
+            selectedPanel === 'peers' && peer.from === selectedPeerFrom
+                ? 'true'
+                : 'false'
         )
         tabsBar.append(peerTab)
         getViewer(`peer:${peer.from}`, entry.body).update(
@@ -403,18 +410,21 @@ function renderShared({ running, peers }) {
         )
     }
     if (others.length) {
-        document
-            .getElementById('running-panel')
-            .classList.remove('mobile-active')
-        document.getElementById('peers-panel').classList.add('mobile-active')
-        runningTab.classList.remove('active')
-        runningTab.setAttribute('aria-selected', 'false')
         updatePeerLayout(others.length)
     } else {
         orderedPeerIds = []
         selectedPeerFrom = null
         updatePeerLayout(0)
     }
+    const showRunning = selectedPanel === 'running'
+    runningTab.classList.toggle('active', showRunning)
+    runningTab.setAttribute('aria-selected', showRunning ? 'true' : 'false')
+    document
+        .getElementById('running-panel')
+        .classList.toggle('mobile-active', showRunning)
+    document
+        .getElementById('peers-panel')
+        .classList.toggle('mobile-active', !showRunning)
     renderEditorState()
 }
 
