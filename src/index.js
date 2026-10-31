@@ -337,9 +337,10 @@ function renderShared({ running, peers }) {
 
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
-        .sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))
     orderedPeerIds = others.map((peer) => peer.from)
-    selectedPeerFrom = others[0]?.from ?? null
+    selectedPeerFrom =
+        [...others].sort((a, b) => b.ts - a.ts || b.id.localeCompare(a.id))[0]
+            ?.from ?? null
     document
         .getElementById('workspace')
         .classList.toggle('solo', others.length === 0)
