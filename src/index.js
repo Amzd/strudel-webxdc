@@ -507,10 +507,32 @@ Object.defineProperty(mirror, 'code', {
     },
 })
 
+// Replace only the differing range so the local cursor/selection is mapped
+function replaceCodePreservingCursor(code) {
+    const old = mirror.editor.state.doc.toString()
+    let from = 0
+    const max = Math.min(old.length, code.length)
+    while (from < max && old[from] === code[from]) from++
+    let oldEnd = old.length
+    let newEnd = code.length
+    while (
+        oldEnd > from &&
+        newEnd > from &&
+        old[oldEnd - 1] === code[newEnd - 1]
+    ) {
+        oldEnd--
+        newEnd--
+    }
+    if (oldEnd === from && newEnd === from) return
+    mirror.editor.dispatch({
+        changes: { from, to: oldEnd, insert: code.slice(from, newEnd) },
+    })
+}
+
 function setCodeSilently(code) {
     silent = true
     try {
-        mirror.setCode(code)
+        replaceCodePreservingCursor(code)
     } finally {
         silent = false
     }
@@ -522,7 +544,7 @@ function undoLocal() {
     if (target === undefined || target === mirror.code) return
     silent = true
     try {
-        mirror.setCode(target)
+        replaceCodePreservingCursor(target)
     } finally {
         silent = false
     }
