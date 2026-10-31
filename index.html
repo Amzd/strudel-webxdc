@@ -246,23 +246,15 @@
                 .mobile-shared-tabs {
                     display: none;
                 }
-                .shared-views.peer-tabs-mode {
-                    display: grid;
-                    grid-column: 2;
-                    grid-row: 1 / -1;
-                    grid-template-rows: auto minmax(0, 1fr);
+                #workspace.peer-tabs-mode {
+                    grid-template-rows:
+                        minmax(0, 1fr) minmax(0, 0.72fr)
+                        auto;
                 }
-                .shared-views.peer-tabs-mode .mobile-shared-tabs {
+                #workspace.peer-tabs-mode .mobile-shared-tabs {
                     display: flex;
-                }
-                .shared-views.peer-tabs-mode > .panel {
-                    display: none;
-                }
-                .shared-views.peer-tabs-mode > .panel.mobile-active {
-                    display: grid;
-                }
-                #workspace.peer-tabs-mode #editor-panel {
-                    grid-row: 1 / -1;
+                    grid-column: 1 / -1;
+                    grid-row: 3;
                 }
                 .shared-views > .panel {
                     display: grid;
@@ -277,11 +269,6 @@
                 }
                 #peers-panel {
                     grid-column: 1 / -1;
-                    grid-row: 2;
-                }
-                #workspace.peer-tabs-mode #running-panel,
-                #workspace.peer-tabs-mode #peers-panel {
-                    grid-column: 2;
                     grid-row: 2;
                 }
             }
