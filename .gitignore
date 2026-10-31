@@ -17,3 +17,4 @@ pnpm-debug.log*
 # npm lockfile (project uses pnpm)
 package-lock.json
 tsconfig.tsbuildinfo
+.w2g/manifest.json
