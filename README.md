@@ -1,6 +1,6 @@
 # Strudel
 
-This [webxdc](https://webxdc.org/) wraps [strudel.cc](https://strudel.cc/) and syncs the code between peers.
+This [webxdc](https://webxdc.org/) wraps [strudel.cc](https://strudel.cc/) and syncs the code between peers. The fastest way to use this is to send the app.xdc asset from releases into a chat in [Delta Chat](https://delta.chat).
 
 # Getting started
 
@@ -16,6 +16,10 @@ pnpm run build
 ```
 
 Do not use this with a tool like https://github.com/kajuwise/spotify-dl-on-steroids because listening to the music you pay for might be illegal.
+
+# TODO
+
+- attach sounds that would be synced to peers automatically
 
 # LLM disclaimer
 
