@@ -1,7 +1,9 @@
 // Shares successfully evaluated code between peers over two channels:
 //  - realtime (webxdc.joinRealtimeChannel) for instant delivery to online peers
 //  - status updates (webxdc.sendUpdate) so offline peers catch up later
-// Every snapshot has a unique id, so copies arriving over both channels (or
+// Two message types: 'compiled' (code that played successfully; becomes the
+// shared running code) and 'draft' (a peer's work in progress, display only).
+// Every message has a unique id, so copies arriving over both channels (or
 // echoed back to the sender) are applied only once.
 
 const encoder = new TextEncoder()
@@ -42,6 +44,7 @@ export function createCodeSync(onChange) {
             typeof msg.code !== 'string' ||
             typeof msg.ts !== 'number' ||
             typeof msg.from !== 'string' ||
+            (msg.type !== 'draft' && msg.type !== 'compiled') ||
             seen.has(msg.id)
         ) {
             return
@@ -49,7 +52,9 @@ export function createCodeSync(onChange) {
         seen.add(msg.id)
         const snap = {
             id: msg.id,
+            type: msg.type,
             code: msg.code,
+            cursor: Number.isFinite(msg.cursor) ? msg.cursor : null,
             ts: msg.ts,
             from: msg.from,
             name: typeof msg.name === 'string' ? msg.name : '',
@@ -59,7 +64,7 @@ export function createCodeSync(onChange) {
             state.peers.set(snap.from, snap)
             changed = true
         }
-        if (isNewer(snap, state.running)) {
+        if (snap.type === 'compiled' && isNewer(snap, state.running)) {
             state.running = snap
             changed = true
         }
@@ -82,24 +87,77 @@ export function createCodeSync(onChange) {
 
     wx.setUpdateListener((update) => receive(update.payload))
 
+    let lastOwnTs = 0
+    const nextTs = () => (lastOwnTs = Math.max(Date.now(), lastOwnTs + 1))
+
+    function send(type, code, cursor) {
+        const msg = {
+            id: `${wx.selfAddr}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
+            type,
+            code,
+            cursor,
+            ts:
+                type === 'compiled'
+                    ? Math.max(nextTs(), (state.running?.ts ?? 0) + 1)
+                    : nextTs(),
+            from: wx.selfAddr,
+            name: wx.selfName,
+        }
+        lastOwnTs = Math.max(lastOwnTs, msg.ts)
+        receive(msg)
+        return msg
+    }
+
+    function sendRealtime(msg) {
+        try {
+            realtime?.send(encoder.encode(JSON.stringify(msg)))
+        } catch (e) {
+            console.warn('realtime send failed', e)
+        }
+    }
+
+    // Drafts go out over realtime immediately and over status updates at most
+    // once per sendUpdateInterval, so offline peers still see the latest one.
+    const minGap = Math.max(1000, Number(wx.sendUpdateInterval) || 1000) + 150
+    let lastUpdateAt = 0
+    let pendingDraft = null
+    let draftTimer = null
+
+    function flushDraft() {
+        draftTimer = null
+        if (!pendingDraft) return
+        wx.sendUpdate({ payload: pendingDraft }, '')
+        lastUpdateAt = Date.now()
+        pendingDraft = null
+    }
+
+    function sendUpdateThrottled(msg) {
+        pendingDraft = msg
+        if (draftTimer) return
+        draftTimer = setTimeout(
+            flushDraft,
+            Math.max(0, minGap - (Date.now() - lastUpdateAt))
+        )
+    }
+
     return {
         state,
+        /** @param {string} code @param {number} cursor */
+        publishDraft(code, cursor) {
+            const msg = send('draft', code, cursor)
+            sendRealtime(msg)
+            sendUpdateThrottled(msg)
+        },
         /** @param {string} code Code that just evaluated successfully */
-        publish(code) {
-            const msg = {
-                id: `${wx.selfAddr}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
-                code,
-                ts: Math.max(Date.now(), (state.running?.ts ?? 0) + 1),
-                from: wx.selfAddr,
-                name: wx.selfName,
-            }
-            receive(msg)
-            try {
-                realtime?.send(encoder.encode(JSON.stringify(msg)))
-            } catch (e) {
-                console.warn('realtime send failed', e)
-            }
+        publish(code, cursor) {
+            const msg = send('compiled', code, cursor)
+            sendRealtime(msg)
+            // The compiled snapshot supersedes any queued draft
+            pendingDraft = null
+            clearTimeout(draftTimer)
+            draftTimer = null
             wx.sendUpdate({ payload: msg }, '')
+            lastUpdateAt = Date.now()
         },
     }
 }
