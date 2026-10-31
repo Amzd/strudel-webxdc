@@ -13,6 +13,7 @@ import {
 } from '@strudel/webaudio'
 
 import { prebake } from './prebake.js'
+import { createCodeSync } from './sync.js'
 
 defaultSettings.isAutoCompletionEnabled = true
 defaultSettings.isLineWrappingEnabled = true
@@ -57,6 +58,7 @@ const mirror = new StrudelMirror({
     prebake,
     solo: true,
     sync: false,
+    afterEval: ({ code }) => codeSync.publish(code),
     onUpdateState: ({ started, error, isDirty }) => {
         updateToolbarState(started, error, isDirty)
     },
@@ -193,6 +195,22 @@ document
         applySetting('isTooltipEnabled', e.target.checked)
     })
 
+// ── View switching ───────────────────────────────────────────────────────────
+
+const viewButtons = document.querySelectorAll('#view-switch button')
+function setView(view) {
+    document.body.dataset.view = view
+    for (const btn of viewButtons) {
+        btn.classList.toggle('active', btn.dataset.view === view)
+    }
+    localStorage.setItem('view', view)
+}
+for (const btn of viewButtons) {
+    btn.addEventListener('click', () => setView(btn.dataset.view))
+}
+const savedView = localStorage.getItem('view')
+setView(['code', 'split', 'visual'].includes(savedView) ? savedView : 'split')
+
 // ── WebXDC integration ───────────────────────────────────────────────────────
 
 let noticeTimeout
@@ -205,10 +223,22 @@ function showSharedNotice() {
     )
 }
 
-window.webxdc.setUpdateListener((update) => {
-    const code = update.payload?.code
-    if (typeof code === 'string' && code !== mirror.code) {
-        mirror.setCode(code)
+// Only code that evaluated successfully is published (afterEval above), so
+// incomplete code never reaches peers. Remote code is applied to the editor
+// and, if we are playing, evaluated right away.
+async function applyRemoteCode(code) {
+    if (code === mirror.code) return
+    mirror.setCode(code)
+    if (mirror.repl.scheduler.started) {
+        codeSync.suppressPublish = true
+        try {
+            await mirror.evaluate()
+        } finally {
+            codeSync.suppressPublish = false
+        }
+    } else {
         showSharedNotice()
     }
-})
+}
+
+const codeSync = createCodeSync(applyRemoteCode)

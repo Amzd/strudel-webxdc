@@ -55,6 +55,35 @@
                 ) !important; /* override default bg to make it transparent to show .pianoroll() */
             }
 
+            body[data-view='code'] #editor-root {
+                background-color: #1a1a1a !important;
+            }
+            body[data-view='split'] #editor-root {
+                bottom: 50%;
+            }
+            body[data-view='visual'] #editor-root {
+                display: none;
+            }
+            #view-switch {
+                display: flex;
+                margin-left: 8px;
+                border: 1px solid var(--toolbar-border);
+                border-radius: 6px;
+                overflow: hidden;
+            }
+            #toolbar #view-switch button {
+                width: auto;
+                height: 28px;
+                padding: 0 10px;
+                border: none;
+                border-radius: 0;
+                font: inherit;
+                font-size: 12px;
+            }
+            #toolbar #view-switch button.active {
+                background: var(--btn-hover);
+                color: #4db870;
+            }
             #editor-root .cm-editor {
                 height: 100%;
                 background: transparent;
@@ -241,7 +270,7 @@
             }
         </style>
     </head>
-    <body>
+    <body data-view="split">
         <div id="editor-root"></div>
 
         <div id="toolbar">
@@ -299,6 +328,13 @@
                     <polyline points="7 3 7 8 15 8" />
                 </svg>
             </button>
+            <div id="view-switch" role="tablist">
+                <button data-view="code" title="Code only">Code</button>
+                <button data-view="split" title="Code and visuals">
+                    Split
+                </button>
+                <button data-view="visual" title="Visuals only">Visual</button>
+            </div>
             <div class="spacer"></div>
             <span id="status-text" class="status"></span>
             <button id="settings-btn" title="Settings">
