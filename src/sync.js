@@ -2,7 +2,8 @@
 //  - realtime (webxdc.joinRealtimeChannel) for instant delivery to online peers
 //  - status updates (webxdc.sendUpdate) so offline peers catch up later
 // Two message types: 'compiled' (code that played successfully; becomes the
-// shared running code) and 'draft' (a peer's work in progress, display only).
+// shared running code; sent over realtime and updates) and 'draft' (a peer's
+// work in progress, display only; realtime only, never stored in history).
 // Every message has a unique id, so copies arriving over both channels (or
 // echoed back to the sender) are applied only once.
 
@@ -86,7 +87,10 @@ export function createCodeSync(onChange) {
     }
 
     // Resolves once the stored history has been replayed
-    const ready = wx.setUpdateListener((update) => receive(update.payload))
+    const ready = wx.setUpdateListener((update) => {
+        // Drafts are realtime-only; ignore any that were stored as updates
+        if (update.payload?.type === 'compiled') receive(update.payload)
+    })
 
     let lastOwnTs = 0
     const nextTs = () => (lastOwnTs = Math.max(Date.now(), lastOwnTs + 1))
@@ -117,30 +121,6 @@ export function createCodeSync(onChange) {
         }
     }
 
-    // Drafts go out over realtime immediately and over status updates at most
-    // once per sendUpdateInterval, so offline peers still see the latest one.
-    const minGap = Math.max(1000, Number(wx.sendUpdateInterval) || 1000) + 150
-    let lastUpdateAt = 0
-    let pendingDraft = null
-    let draftTimer = null
-
-    function flushDraft() {
-        draftTimer = null
-        if (!pendingDraft) return
-        wx.sendUpdate({ payload: pendingDraft }, '')
-        lastUpdateAt = Date.now()
-        pendingDraft = null
-    }
-
-    function sendUpdateThrottled(msg) {
-        pendingDraft = msg
-        if (draftTimer) return
-        draftTimer = setTimeout(
-            flushDraft,
-            Math.max(0, minGap - (Date.now() - lastUpdateAt))
-        )
-    }
-
     return {
         state,
         ready,
@@ -148,18 +128,12 @@ export function createCodeSync(onChange) {
         publishDraft(code, cursor) {
             const msg = send('draft', code, cursor)
             sendRealtime(msg)
-            sendUpdateThrottled(msg)
         },
         /** @param {string} code Code that just evaluated successfully */
         publish(code, cursor) {
             const msg = send('compiled', code, cursor)
             sendRealtime(msg)
-            // The compiled snapshot supersedes any queued draft
-            pendingDraft = null
-            clearTimeout(draftTimer)
-            draftTimer = null
             wx.sendUpdate({ payload: msg }, '')
-            lastUpdateAt = Date.now()
         },
     }
 }

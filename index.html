@@ -108,6 +108,13 @@
                     --background
                 ) !important; /* override default bg to make it transparent to show .pianoroll() */
             }
+            #workspace.solo {
+                grid-template-columns: minmax(0, 1fr);
+                grid-template-rows: minmax(0, 1fr);
+            }
+            #workspace.solo .shared-views {
+                display: none;
+            }
             .shared-views {
                 min-width: 0;
                 min-height: 0;

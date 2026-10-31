@@ -282,6 +282,9 @@ function renderShared({ running, peers }) {
     const others = [...peers.values()]
         .filter((p) => p.from !== self)
         .sort((a, b) => a.from.localeCompare(b.from))
+    document
+        .getElementById('workspace')
+        .classList.toggle('solo', others.length === 0)
     const peerLabel = others.length
         ? others.map((p) => p.name || shortAddress(p.from)).join(', ')
         : 'Peers'
@@ -341,6 +344,74 @@ function showSharedNotice() {
 let baseCode = DEFAULT_CODE
 let applyingRemote = false
 
+// Local undo history: the last few local changes, then the running code.
+// Remote and undo-driven changes are not recorded.
+const UNDO_STEPS = 3
+const UNDO_GROUP_MS = 750
+let undoHistory = []
+let lastChangeAt = 0
+let silent = false
+let trackedCode = mirror.code
+Object.defineProperty(mirror, 'code', {
+    get: () => trackedCode,
+    set(value) {
+        if (!silent && value !== trackedCode) {
+            const now = Date.now()
+            if (now - lastChangeAt > UNDO_GROUP_MS) {
+                undoHistory.push(trackedCode)
+                if (undoHistory.length > UNDO_STEPS) undoHistory.shift()
+            }
+            lastChangeAt = now
+        }
+        trackedCode = value
+    },
+})
+
+function setCodeSilently(code) {
+    silent = true
+    try {
+        mirror.setCode(code)
+    } finally {
+        silent = false
+    }
+    undoHistory = []
+}
+
+function undoLocal() {
+    const target = undoHistory.pop() ?? latestRunning?.code
+    if (target === undefined || target === mirror.code) return
+    silent = true
+    try {
+        mirror.setCode(target)
+    } finally {
+        silent = false
+    }
+    lastChangeAt = 0
+}
+
+document.addEventListener(
+    'keydown',
+    (e) => {
+        if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+        const key = e.key.toLowerCase()
+        if (key === 's' && !e.shiftKey) {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!updateBtn.disabled) updateBtn.click()
+        } else if (
+            key === 'z' &&
+            !e.shiftKey &&
+            e.target instanceof Element &&
+            e.target.closest('#editor-root')
+        ) {
+            e.preventDefault()
+            e.stopPropagation()
+            undoLocal()
+        }
+    },
+    true
+)
+
 async function onSharedChange(state) {
     const { running } = state
     renderShared(state)
@@ -349,7 +420,7 @@ async function onSharedChange(state) {
     baseCode = running.code
     const local = mirror.code
     const merged = mergeEditorText(previous, local, running.code)
-    if (merged !== local) mirror.setCode(merged)
+    if (merged !== local) setCodeSilently(merged)
     // Follow along live only when the editor has no local changes of its own
     const isOwn = running.from === window.webxdc.selfAddr
     if (!isOwn && merged === running.code && mirror.repl.scheduler.started) {
@@ -384,16 +455,13 @@ function shareDraft() {
     renderEditorState()
 }
 
-// Start from the synced code instead of the default: restore this user's last
-// draft if it is newer than the running code, otherwise the running code.
-// Drafts are only shared once history has replayed so the default never
-// overwrites what peers (or this user) already shared.
+// Start from the synced running code instead of the default. Drafts are only
+// shared once history has replayed.
 codeSync.ready.then(() => {
-    const { running, peers } = codeSync.state
-    const own = peers.get(window.webxdc.selfAddr)
-    const target = own && (!running || own.ts > running.ts) ? own : running
+    const { running } = codeSync.state
+    const target = running
     if (target && mirror.code === DEFAULT_CODE && target.code !== mirror.code) {
-        mirror.setCode(target.code)
+        setCodeSilently(target.code)
         baseCode = running?.code ?? baseCode
     }
     renderEditorState()
