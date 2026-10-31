@@ -12,7 +12,10 @@ import {
     webaudioOutput,
 } from '@strudel/webaudio'
 
+import { mergeEditorText } from './merge.js'
 import { prebake } from './prebake.js'
+import { createCodeSync } from './sync.js'
+import { createViewer } from './viewer.js'
 
 defaultSettings.isAutoCompletionEnabled = true
 defaultSettings.isLineWrappingEnabled = true
@@ -57,8 +60,13 @@ const mirror = new StrudelMirror({
     prebake,
     solo: true,
     sync: false,
+    // Only code that evaluated successfully is shared with peers
+    afterEval: ({ code }) => {
+        if (!applyingRemote) codeSync.publish(code, cursorPos())
+    },
     onUpdateState: ({ started, error, isDirty }) => {
         updateToolbarState(started, error, isDirty)
+        renderEditorState()
     },
 })
 
@@ -193,6 +201,132 @@ document
         applySetting('isTooltipEnabled', e.target.checked)
     })
 
+// ── Shared views (editor / running / peers) ──────────────────────────────────
+
+const editorState = document.getElementById('editor-state')
+const runningContent = document.getElementById('running-content')
+const runningMeta = document.getElementById('running-meta')
+const peersContent = document.getElementById('peers-content')
+const peersTitle = document.getElementById('peers-title')
+const tabs = document.querySelectorAll('.mobile-shared-tabs .tab')
+
+for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+        for (const t of tabs) t.classList.toggle('active', t === tab)
+        document
+            .getElementById('running-panel')
+            .classList.toggle('mobile-active', tab.dataset.panel === 'running')
+        document
+            .getElementById('peers-panel')
+            .classList.toggle('mobile-active', tab.dataset.panel === 'peers')
+    })
+}
+
+function shortAddress(addr) {
+    return addr.length > 12 ? `${addr.slice(0, 7)}…${addr.slice(-3)}` : addr
+}
+
+const viewers = new Map()
+
+function getViewer(key, container) {
+    let viewer = viewers.get(key)
+    if (!viewer || !container.contains(viewer.dom)) {
+        container.replaceChildren()
+        viewer = createViewer(container)
+        viewers.set(key, viewer)
+    }
+    return viewer
+}
+
+function emptyState(text) {
+    const div = document.createElement('div')
+    div.className = 'empty-state'
+    div.textContent = text
+    return div
+}
+
+let latestRunning = null
+
+function renderEditorState() {
+    const running = latestRunning
+    if (!running) {
+        editorState.textContent = 'Not run yet'
+        editorState.classList.remove('draft')
+        return
+    }
+    const differs = mirror.code !== running.code
+    editorState.textContent = differs ? 'Draft differs' : 'Matches running'
+    editorState.classList.toggle('draft', differs)
+}
+
+const peerCards = new Map()
+
+function renderShared({ running, peers }) {
+    latestRunning = running
+    const self = window.webxdc.selfAddr
+
+    if (running) {
+        runningMeta.textContent =
+            running.from === self
+                ? 'by you'
+                : `by ${running.name || shortAddress(running.from)}`
+        getViewer('running', runningContent).update(running.code)
+    } else {
+        runningMeta.textContent = ''
+        viewers.delete('running')
+        runningContent.replaceChildren(
+            emptyState('Code that plays successfully is shared here.')
+        )
+    }
+
+    const others = [...peers.values()]
+        .filter((p) => p.from !== self)
+        .sort((a, b) => a.from.localeCompare(b.from))
+    document
+        .getElementById('workspace')
+        .classList.toggle('solo', others.length === 0)
+    const peerLabel = others.length
+        ? others.map((p) => p.name || shortAddress(p.from)).join(', ')
+        : 'Peers'
+    peersTitle.textContent = peerLabel
+    peersContent.classList.toggle('single-peer', others.length === 1)
+    tabs[1].textContent = peerLabel
+    if (!others.length) {
+        peerCards.clear()
+        viewers.forEach(
+            (_, key) => key.startsWith('peer:') && viewers.delete(key)
+        )
+        peersContent.replaceChildren(
+            emptyState("Peers' drafts will appear here as they type.")
+        )
+    } else {
+        peersContent.querySelector('.empty-state')?.remove()
+    }
+    for (const peer of others) {
+        let entry = peerCards.get(peer.from)
+        if (!entry) {
+            const card = document.createElement('article')
+            card.className = 'peer-card'
+            const heading = document.createElement('div')
+            heading.className = 'peer-heading'
+            const name = document.createElement('strong')
+            const body = document.createElement('div')
+            heading.append(name)
+            card.append(heading, body)
+            entry = { card, name, body }
+            peerCards.set(peer.from, entry)
+        }
+        entry.name.textContent = peer.name || shortAddress(peer.from)
+        if (!entry.card.isConnected) peersContent.append(entry.card)
+        getViewer(`peer:${peer.from}`, entry.body).update(
+            peer.code,
+            running?.code ?? null,
+            peer.cursor
+        )
+    }
+    renderEditorState()
+}
+
 // ── WebXDC integration ───────────────────────────────────────────────────────
 
 let noticeTimeout
@@ -205,10 +339,133 @@ function showSharedNotice() {
     )
 }
 
-window.webxdc.setUpdateListener((update) => {
-    const code = update.payload?.code
-    if (typeof code === 'string' && code !== mirror.code) {
+// Code last known to be running. Local edits are merged against it so they
+// are never overwritten by an incoming snapshot.
+let baseCode = DEFAULT_CODE
+let applyingRemote = false
+
+// Local undo history: the last few local changes, then the running code.
+// Remote and undo-driven changes are not recorded.
+const UNDO_STEPS = 3
+const UNDO_GROUP_MS = 750
+let undoHistory = []
+let lastChangeAt = 0
+let silent = false
+let trackedCode = mirror.code
+Object.defineProperty(mirror, 'code', {
+    get: () => trackedCode,
+    set(value) {
+        if (!silent && value !== trackedCode) {
+            const now = Date.now()
+            if (now - lastChangeAt > UNDO_GROUP_MS) {
+                undoHistory.push(trackedCode)
+                if (undoHistory.length > UNDO_STEPS) undoHistory.shift()
+            }
+            lastChangeAt = now
+        }
+        trackedCode = value
+    },
+})
+
+function setCodeSilently(code) {
+    silent = true
+    try {
         mirror.setCode(code)
+    } finally {
+        silent = false
+    }
+    undoHistory = []
+}
+
+function undoLocal() {
+    const target = undoHistory.pop() ?? latestRunning?.code
+    if (target === undefined || target === mirror.code) return
+    silent = true
+    try {
+        mirror.setCode(target)
+    } finally {
+        silent = false
+    }
+    lastChangeAt = 0
+}
+
+document.addEventListener(
+    'keydown',
+    (e) => {
+        if (!(e.metaKey || e.ctrlKey) || e.altKey) return
+        const key = e.key.toLowerCase()
+        if (key === 's' && !e.shiftKey) {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!updateBtn.disabled || !mirror.repl.scheduler.started) {
+                mirror.evaluate()
+            }
+        } else if (
+            key === 'z' &&
+            !e.shiftKey &&
+            e.target instanceof Element &&
+            e.target.closest('#editor-root')
+        ) {
+            e.preventDefault()
+            e.stopPropagation()
+            undoLocal()
+        }
+    },
+    true
+)
+
+async function onSharedChange(state) {
+    const { running } = state
+    renderShared(state)
+    if (!running || running.code === baseCode) return
+    const previous = baseCode
+    baseCode = running.code
+    const local = mirror.code
+    const merged = mergeEditorText(previous, local, running.code)
+    if (merged !== local) setCodeSilently(merged)
+    // Follow along live only when the editor has no local changes of its own
+    const isOwn = running.from === window.webxdc.selfAddr
+    if (!isOwn && merged === running.code && mirror.repl.scheduler.started) {
+        applyingRemote = true
+        try {
+            await mirror.evaluate()
+        } finally {
+            applyingRemote = false
+        }
+    } else if (merged !== local) {
         showSharedNotice()
     }
+    renderEditorState()
+}
+
+const codeSync = createCodeSync(onSharedChange)
+renderShared(codeSync.state)
+
+function cursorPos() {
+    return mirror.editor.state.selection.main.head
+}
+
+// Share the in-progress draft and cursor (display only; never evaluated)
+let sentDraft = null
+function shareDraft() {
+    const draft = { code: mirror.code, cursor: cursorPos() }
+    if (sentDraft?.code === draft.code && sentDraft.cursor === draft.cursor) {
+        return
+    }
+    sentDraft = draft
+    codeSync.publishDraft(draft.code, draft.cursor)
+    renderEditorState()
+}
+
+// Start from the synced running code instead of the default. Drafts are only
+// shared once history has replayed.
+codeSync.ready.then(() => {
+    const { running } = codeSync.state
+    const target = running
+    if (target && mirror.code === DEFAULT_CODE && target.code !== mirror.code) {
+        setCodeSilently(target.code)
+        baseCode = running?.code ?? baseCode
+    }
+    renderEditorState()
+    setInterval(shareDraft, 300)
 })
