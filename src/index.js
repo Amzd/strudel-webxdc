@@ -397,7 +397,9 @@ document.addEventListener(
         if (key === 's' && !e.shiftKey) {
             e.preventDefault()
             e.stopPropagation()
-            if (!updateBtn.disabled) updateBtn.click()
+            if (!updateBtn.disabled || !mirror.repl.scheduler.started) {
+                mirror.evaluate()
+            }
         } else if (
             key === 'z' &&
             !e.shiftKey &&
