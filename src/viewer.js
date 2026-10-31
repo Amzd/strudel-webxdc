@@ -2,6 +2,14 @@ import { initEditor } from '@strudel/codemirror'
 
 import { changedLineIndexes } from './merge.js'
 
+function revealIn(container, el) {
+    if (!container) return
+    const c = container.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    if (r.top < c.top) container.scrollTop -= c.top - r.top
+    else if (r.bottom > c.bottom) container.scrollTop += r.bottom - c.bottom
+}
+
 /**
  * Read-only Strudel editor (syntax highlighting, theme, line numbers) with an
  * optional remote cursor and highlighting of lines that differ from a base.
@@ -58,8 +66,9 @@ export function createViewer(parent) {
                 marker.style.height = `${p.bottom - p.top}px`
                 marker.style.left = `${p.left}px`
                 overlay.append(marker)
-                // Follow the cursor in every scrollable ancestor
-                marker.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+                // Only scroll the editor and its panel, never the window
+                revealIn(view.scrollDOM, marker)
+                revealIn(view.dom.closest('.panel-content'), marker)
             }
         }
     }
