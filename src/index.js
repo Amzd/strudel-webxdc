@@ -47,6 +47,13 @@ initAudioOnFirstClick()
 
 const drawContext = getDrawContext()
 const drawTime = [-2, 2]
+/** @type {string | null} */
+let evaluatedCode = null
+/** @type {[number, number][]} */
+let evaluatedMiniLocations = []
+/** @type {{ isActive: (time: number) => boolean }[]} */
+let visibleHaps = []
+let highlightTime = 0
 
 const mirror = new StrudelMirror({
     defaultOutput: webaudioOutput,
@@ -61,8 +68,42 @@ const mirror = new StrudelMirror({
     solo: true,
     sync: false,
     // Only code that evaluated successfully is shared with peers
-    afterEval: ({ code }) => {
+    /**
+     * @param {{
+     *     code: string
+     *     meta?: { miniLocations?: [number, number][] }
+     * }} options
+     */
+    afterEval: ({ code, meta }) => {
+        evaluatedCode = code
+        evaluatedMiniLocations = meta?.miniLocations ?? []
         if (!applyingRemote) codeSync.publish(code, cursorPos())
+        if (latestRunning?.code === code) {
+            const viewer = getViewer('running', runningContent)
+            viewer.updatePatternLocations(evaluatedMiniLocations)
+        }
+    },
+    /**
+     * @param {{ isActive: (time: number) => boolean }[]} haps
+     * @param {number} time
+     * @param {((...args: unknown[]) => void)[]} painters
+     */
+    onDraw: (haps, time, painters) => {
+        painters?.forEach((painter) =>
+            painter(drawContext, time, haps, drawTime)
+        )
+        visibleHaps = haps.filter((hap) => hap.isActive(time))
+        highlightTime = time
+        if (latestRunning?.code === evaluatedCode) {
+            getViewer('running', runningContent).highlight(visibleHaps, time)
+        }
+    },
+    /** @param {boolean} started */
+    onToggle: (started) => {
+        if (started) return
+        visibleHaps = []
+        highlightTime = 0
+        viewers.get('running')?.clearPatternHighlights()
     },
     onUpdateState: ({ started, error, isDirty }) => {
         updateToolbarState(started, error, isDirty)
@@ -151,6 +192,19 @@ function applySetting(key, value) {
     mirror.changeSetting(key, value)
     const updated = { ...codemirrorSettings.get(), [key]: value }
     codemirrorSettings.set(updated)
+    if (key === 'isPatternHighlightingEnabled') {
+        const viewer = viewers.get('running')
+        viewer?.destroy()
+        viewers.delete('running')
+        if (latestRunning) {
+            const runningViewer = getViewer('running', runningContent)
+            runningViewer.update(latestRunning.code)
+            if (latestRunning.code === evaluatedCode) {
+                runningViewer.updatePatternLocations(evaluatedMiniLocations)
+                runningViewer.highlight(visibleHaps, highlightTime)
+            }
+        }
+    }
 }
 
 document.getElementById('font-size-input').addEventListener('input', (e) => {
@@ -326,7 +380,11 @@ function renderShared({ running, peers }) {
             running.from === self
                 ? 'by you'
                 : `by ${running.name || shortAddress(running.from)}`
-        getViewer('running', runningContent).update(running.code)
+        const viewer = getViewer('running', runningContent)
+        viewer.update(running.code)
+        if (running.code !== evaluatedCode) {
+            viewer.clearPatternHighlights()
+        }
     } else {
         runningMeta.textContent = ''
         viewers.delete('running')
