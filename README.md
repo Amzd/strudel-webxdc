@@ -2,6 +2,8 @@
 
 This [webxdc](https://webxdc.org/) wraps [strudel.cc](https://strudel.cc/) and syncs the code between peers. The fastest way to use this is to send the app.xdc asset from releases into a chat in [Delta Chat](https://delta.chat).
 
+A compact drum kit (`bd`, `sd`, `hh`, `oh`, and `cp`) is bundled at build time so these samples work offline.
+
 # Getting started
 
 ```sh

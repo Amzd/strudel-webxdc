@@ -54,6 +54,15 @@ function soundfonts() {
             const { default: gm } = await import('@strudel/soundfonts/gm.mjs')
             const BASE_URL =
                 'https://felixroos.github.io/webaudiofontdata/sound'
+            const DRUM_BASE_URL =
+                'https://raw.githubusercontent.com/ritchse/tidal-drum-machines/main/machines'
+            const DRUM_SAMPLES = {
+                bd: 'RolandTR808/rolandtr808-bd/BD0000.WAV',
+                sd: 'RolandTR808/rolandtr808-sd/SD0000.WAV',
+                hh: 'RolandTR808/rolandtr808-hh/CH.WAV',
+                oh: 'RolandTR808/rolandtr808-oh/OH00.WAV',
+                cp: 'RolandTR808/rolandtr808-cp/cp0.wav',
+            }
             const FULL_VARIANTS = new Set(['gm_lead_6_voice'])
 
             const toDownload = new Set()
@@ -97,6 +106,20 @@ function soundfonts() {
                     `[soundfonts] Warning: ${failed}/${toDownload.size} soundfont files could not be downloaded. GM sounds may not work offline.`
                 )
             }
+
+            const drumsDir = join(soundsDir, 'drums')
+            mkdirSync(drumsDir, { recursive: true })
+            await Promise.all(
+                Object.entries(DRUM_SAMPLES).map(async ([name, fileName]) => {
+                    const dest = join(drumsDir, `${name}.wav`)
+                    if (!existsSync(dest)) {
+                        await downloadFile(`${DRUM_BASE_URL}/${fileName}`, dest)
+                    }
+                })
+            )
+            console.log(
+                `[drums] ${Object.keys(DRUM_SAMPLES).length} samples available`
+            )
         },
     }
 }
