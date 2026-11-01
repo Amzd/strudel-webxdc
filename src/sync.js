@@ -34,6 +34,7 @@ export function createCodeSync(onChange) {
         running: /** @type {Snapshot | null} */ (null),
         /** Newest snapshot per sender */
         peers: /** @type {Map<string, Snapshot>} */ (new Map()),
+        documentName: 'Strudel',
     }
 
     const isNewer = (a, b) =>
@@ -89,7 +90,22 @@ export function createCodeSync(onChange) {
     // Resolves once the stored history has been replayed
     const ready = wx.setUpdateListener((update) => {
         // Drafts are realtime-only; ignore any that were stored as updates
-        if (update.payload?.type === 'compiled') receive(update.payload)
+        const payload = update.payload
+        if (typeof payload !== 'object' || payload === null) return
+        if ('type' in payload && payload.type === 'compiled') {
+            receive(payload)
+        } else if (
+            'type' in payload &&
+            payload.type === 'document-name' &&
+            'name' in payload &&
+            typeof payload.name === 'string'
+        ) {
+            const name = payload.name.trim().slice(0, 100)
+            if (name) {
+                state.documentName = name
+                onChange(state)
+            }
+        }
     })
 
     let lastOwnTs = 0
@@ -113,6 +129,20 @@ export function createCodeSync(onChange) {
         return msg
     }
 
+    /** @param {string} name */
+    function setDocumentName(name) {
+        if (state.documentName === name) return
+        state.documentName = name
+        wx.sendUpdate(
+            {
+                payload: { type: 'document-name', name },
+                document: name,
+            },
+            ''
+        )
+        onChange(state)
+    }
+
     function sendRealtime(msg) {
         try {
             realtime?.send(encoder.encode(JSON.stringify(msg)))
@@ -133,7 +163,8 @@ export function createCodeSync(onChange) {
         publish(code, cursor) {
             const msg = send('compiled', code, cursor)
             sendRealtime(msg)
-            wx.sendUpdate({ payload: msg }, '')
+            wx.sendUpdate({ payload: msg, document: state.documentName }, '')
         },
+        setDocumentName,
     }
 }

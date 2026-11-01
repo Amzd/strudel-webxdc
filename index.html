@@ -353,6 +353,25 @@
                 border-color: transparent;
             }
 
+            #document-name {
+                min-width: 0;
+                width: min(240px, 40vw);
+                padding: 6px 8px;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                outline: none;
+                background: transparent;
+                color: var(--foreground);
+                font: inherit;
+                font-size: 15px;
+                font-weight: 700;
+            }
+
+            #document-name:focus {
+                background: var(--btn-hover);
+                border-color: var(--toolbar-border);
+            }
+
             #play-btn.playing {
                 color: #4db870;
             }
@@ -502,6 +521,16 @@
         </main>
 
         <div id="toolbar">
+            <input
+                id="document-name"
+                type="text"
+                value="Strudel"
+                maxlength="100"
+                aria-label="Webxdc document name"
+                title="Edit document name"
+            />
+            <div class="spacer"></div>
+            <span id="status-text" class="status"></span>
             <button id="play-btn" title="Play / Stop (Ctrl+Enter)">
                 <svg
                     width="20"
@@ -556,8 +585,6 @@
                     <polyline points="7 3 7 8 15 8" />
                 </svg>
             </button>
-            <div class="spacer"></div>
-            <span id="status-text" class="status"></span>
             <button id="settings-btn" title="Settings">
                 <svg
                     width="20"
