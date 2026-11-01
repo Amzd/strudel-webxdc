@@ -120,6 +120,14 @@ syncSettingsPanel(savedSettings)
 
 const playBtn = document.getElementById('play-btn')
 const updateBtn = document.getElementById('update-btn')
+function getDocumentNameInput() {
+    const input = document.getElementById('document-name')
+    if (!(input instanceof HTMLInputElement)) {
+        throw new Error('Document name input is missing')
+    }
+    return input
+}
+const documentNameInput = getDocumentNameInput()
 const settingsBtn = document.getElementById('settings-btn')
 const settingsPanel = document.getElementById('settings-panel')
 const statusText = document.getElementById('status-text')
@@ -127,6 +135,23 @@ const sharedNotice = document.getElementById('shared-notice')
 
 playBtn.addEventListener('click', () => mirror.toggle())
 updateBtn.addEventListener('click', () => mirror.evaluate())
+
+documentNameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+        event.preventDefault()
+        documentNameInput.blur()
+    }
+})
+
+documentNameInput.addEventListener('change', () => {
+    const name = documentNameInput.value.trim()
+    if (!name) {
+        documentNameInput.value = codeSync.state.documentName
+        return
+    }
+    documentNameInput.value = name
+    codeSync.setDocumentName(name)
+})
 
 settingsBtn.addEventListener('click', () => {
     settingsPanel.classList.toggle('open')
@@ -577,6 +602,9 @@ document.addEventListener(
 )
 
 async function onSharedChange(state) {
+    if (documentNameInput !== document.activeElement) {
+        documentNameInput.value = state.documentName
+    }
     const { running } = state
     renderShared(state)
     if (!running || running.code === baseCode) return
